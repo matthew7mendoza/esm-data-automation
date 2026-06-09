@@ -1,0 +1,12 @@
+name: spear-env
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - xarray
+  - netcdf4
+  - jupyter
+  - python-dotenv
+  - pip
+  - pip:
+      - google-genai
