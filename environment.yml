@@ -9,8 +9,7 @@ dependencies:
   - jupyter
   - python-dotenv
   - pydantic
-  - pypdf
-  - python-docx
   - pip
   - pip:
       - google-genai
+      - "markitdown[all]"

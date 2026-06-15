@@ -1,35 +1,29 @@
-import os
-import json
-from pathlib import Path
-from dotenv import load_dotenv
+import logging
+from typing import Any
 from google import genai
 from google.genai import types
-from src.config import DOCUMENT_TEMPLATES
+from pydantic import ValidationError
 
+from src.config import DOCUMENT_TEMPLATES, FormResponses, DEFAULT_LLM_INSTRUCTIONS
+from src.exceptions import AgentConfigurationError, AgentExecutionError
 
-env_path = Path(__file__).parent.parent / ".env"
-load_dotenv(dotenv_path = env_path, override = True)
+logger = logging.getLogger(__name__)
 
 class LLM_Agent:
-    def __init__(self, model_name = "gemini-3.1-pro-preview", temperature = 0.0):
-
-        api_key = os.environ.get("GEMINI_API_KEY")
+    def __init__(
+      self,
+      api_key: str,
+      model_name: str = "gemini-3.1-pro-preview",
+      temperature: float = 0.0,
+      system_instructions: str = DEFAULT_LLM_INSTRUCTIONS      
+    ):
         if not api_key:
-            raise ValueError(f"API Key not found in {env_path}")
-
-        self.client = genai.Client(api_key = api_key)
+            raise AgentConfigurationError("A valid API key must be provided.")
+        
+        self.client = genai.Client(api_key=api_key)
         self.model_name = model_name
         self.temperature = temperature
-
-        # Master prompt of AI agent
-        self.system_instructions = (
-            "You are a strict data management assistant. Your objective is to extract information "
-            "from user-provided scientific documents and metadata to accurately answer form questions "
-            "for Data Management Plans, ReadMes, and DOIs. "
-            "Keep answers concise and strictly technical. If the provided document does not contain "
-            "the answer to a requested question, do not guess. Instead, add that exact question to the "
-            "missing_information list."
-            )
+        self.system_instructions = system_instructions
         
     def extract_data(self, questions_list, document_text, schema):
         """
@@ -47,26 +41,43 @@ class LLM_Agent:
             response_schema = schema,
         )
 
-        response = self.client.models.generate_content(
-            model = self.model_name,
-            contents = prompt,
-            config = config
-        )
+        try:
+            response = self.client.models.generate_content(
+                model = self.model_name,
+                contents = prompt,
+                config = config
+            )
+        except Exception as api_err:
+            logger.error(f"LLM API call failed: {api_err}")
+            raise AgentExecutionError("Failed to communicate with LLM API") from api_err
 
-        raw_data = json.loads(response.text)
-        flat_answers = {item["question"]: item["answer"] for item in raw_data["extracted_answers"]}
+        if not response.text:
+            raise AgentExecutionError("Empty response from LLM API.")
+        
+        try:
+            if not response.parsed:
+                raise AgentExecutionError("The AI returned an empty response.")
+            
+            validated_data = response.parsed
+
+        except ValidationError as val_err:
+            logger.error(f"LLM output violated schema format: {val_err}")
+            raise AgentExecutionError("The AI returned improperly formatted JSON.") from val_err
+        
+        flat_answers = {item.question: item.answer for item in validated_data.extracted_answers}
 
         return {
             "extracted_answers": flat_answers,
-            "missing_information": raw_data["missing_information"]
+            "missing_information": validated_data.missing_information
         }
 
 
-    def process_document(self, doc_type, document_text):
-        config = DOCUMENT_TEMPLATES.get(doc_type.upper())
+    def process_document(self, doc_type: str, document_text: str) -> dict[str, Any]:
+        doc_type_upper = doc_type.upper()
+        config = DOCUMENT_TEMPLATES.get(doc_type_upper)
 
         if not config:
-            raise ValueError(f"Unsupported document type: '{doc_type}'")
+            raise ValueError(f"Unsupported document type: '{doc_type}'. Available types {list(DOCUMENT_TEMPLATES.keys())}")
         
         return self.extract_data(
             questions_list = config["questions"],
