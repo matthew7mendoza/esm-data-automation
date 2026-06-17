@@ -218,3 +218,7 @@ __marimo__/
 .streamlit/secrets.toml
 
 inputs/
+
+# Ignore raw compliance inputs and copy-pastes from scientists
+data/inputs/*
+!data/inputs/.gitkeep
