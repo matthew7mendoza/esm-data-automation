@@ -1,30 +1,69 @@
-"""
-Tracks how consistent and stable an AI's answers are across multiple runs.
-"""
-import json
 import asyncio
+import json
 import logging
+from collections import Counter
+from dataclasses import dataclass, field, InitVar
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Generator
-from collections import Counter
+from typing import Any
 import yaml
-from google import genai
-from google.genai import types
 
-from src.models import MasterAuditPayloadSchema, AgentExecutionError, AgentConfigurationError
-from src.metrics import(
+from src.providers import LLMProvider
+from src.models import (
+    ComplianceScoringSchema,
+    RubricItemConfig,
+    AgentConfigurationError
+)
+from src.metrics import (
+    calculate_gwets_ac1, 
     calculate_percentage_agreement,
-    calculate_gwets_ac1,
-    calculate_fleiss_kappa,
     calculate_reasoning_stability
 )
 
 logger = logging.getLogger(__name__)
 
+@dataclass(slots=True)
+class ItemAuditStream:
+    """
+    Stores and manages the grading history for a single form question.
+    This class tracks how the AI answered one specific question across all test runs
+    """
+    item_id: str
+    question: str
+    strategy: str
+    iterations: InitVar[int]
+
+    verdicts: list[str] = field(init=False)
+    justifications: list[str] = field(init=False)
+
+    def __post_init__(self, iterations: int) -> None:
+        """
+        Based off # of test runs, pre-allocate empty placeholder list 
+        to accomodate the # of test runs
+        """
+
+        self.verdicts = ["No"] * iterations
+        self.justifications = ["Omitted due to execution failure."] * iterations
+
+    def compute_reliability(self) -> dict[str, Any]:
+        """
+        Calculate if the AI is reliable for any specific question by looking 
+        at the distribution of the test runs
+        """
+
+        return {
+            "question": f"[{self.item_id} {self.question}]",
+            "inferred_strategy": self.strategy,
+            "percentage_agreement_pa": round(calculate_percentage_agreement(self.verdicts), 2),
+            "gwets_ac1_gamma": round(calculate_gwets_ac1(self.verdicts), 4),
+            "reasoning_stability_r_stab": round(calculate_reasoning_stability(self.justifications, self.strategy), 2),
+            "raw_dict_distribution": Counter(self.verdicts)
+        }
+    
+
 class LLMJudge:
     """
-    Runs tests to measure how consistently the AI gives the same answers and grades.
+    LLM Judge which evaluates the AI's answers to the questions
     """
 
     STRATEGY_KEYWORDS = {
@@ -32,16 +71,20 @@ class LLMJudge:
         "Quote": ["verbatim", "string", "quote", "text", "url"]
     }
 
-    def __init__(self, client: genai.Client):
-        if not client:
-            raise ValueError("An active AI client must be provided.")
-        self.client = client
+    provider: LLMProvider
+    system_instruction: str
+
+    def __init__(self, provider: LLMProvider) -> None:
+        if not provider:
+            raise ValueError("An active LLM API key must be provided!")
+        self.provider = provider
         self.system_instruction = self._load_judge_instructions()
 
     def _load_judge_instructions(self) -> str:
         """
-        Loads judge system instructions from templates.yaml file
+        Reads system instructionsfor the judge from templates.yaml file
         """
+
         config_path = Path(__file__).parent / "templates.yaml"
         if not config_path.exists():
             raise AgentConfigurationError(f"templates.yaml file missing at path: {config_path.resolve()}")
@@ -49,61 +92,16 @@ class LLMJudge:
         try:
             with open(config_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
-            return data["JUDGE_INSTRUCTIONS"]
+                return data["JUDGE_INSTRUCTIONS"]
         except KeyError as key_error:
-            raise AgentConfigurationError("The required key 'JUDGE_INSTRUCTIONS' was missing inside templates.yaml") from key_error
+            raise AgentConfigurationError("The requred key 'JUDGE_INSTRUCTIONS' was missing inside of templates.yaml") from key_error
         except Exception as yaml_error:
-            raise AgentConfigurationError("Failed to cleanly decode external YAML runtime templates structure.") from yaml_error
-
-
-    async def execute_multi_axis_evaluation_async(self, technical_context: str, generated_paste: str) -> dict[str, Any] | None:
-        """
-        Asks the AI to evaluate if a copied table matches original source documentation asynchroniously
-        """
-
-        user_prompt = (
-            f"[SOURCE DOCUMENT]\n{technical_context}\n\n"
-            f"[COMPLIANCE TABLE TO CHECK]\n{generated_paste}"
-        )
-
-        try:
-            response = await self.client.aio.models.generate_content(
-                model="gemini-3.1-pro-preview",
-                contents=user_prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.system_instruction,
-                    response_mime_type="application/json",
-                    response_schema=MasterAuditPayloadSchema,
-                    temperature=0.0
-                )
-            )
-
-            raw_output = response.text
-            if raw_output:
-                try:
-                    return json.loads(raw_output)
-                except json.JSONDecodeError as json_error:
-                    logger.error(f"Failed to parse concurrent LLM json output. error: {json_error}")
-                    return None
-            return None
+            raise AgentConfigurationError("Failed to cleanly decode exterminal YAML runtime template structure.") from yaml_error
         
-        except Exception as api_error:
-            logger.error("Failed to communicate with AI model during async evaluation", exc_info=True)
-            return None
-        
-    def _yield_all_items(self, raw_runs_history: list[dict[str, Any]]) -> Generator[dict[str, Any], None, None]:
-        """
-        Flattens a list of past test runs to extract each question and answer item.
-        """
-
-        for run in raw_runs_history:
-            for category in run.get("categories", []):
-                for item in category.get("items", []):
-                    yield item
-
     def _infer_evaluation_strategy(self, question_text: str) -> str:
         """
-        Figures out of a question checks for a quote, numeric value, or assertion based on keywords.
+        Looks at the wording of the question to decide if the AI 
+        should look for a number, quote, or a general fact
         """
 
         question_lower = question_text.lower()
@@ -120,66 +118,92 @@ class LLMJudge:
         i_iterations: int = 5
     ) -> dict[str, Any]:
         """
-        Runs the evaluation multiple times at the same time.
-        Check's if the AI's answers shift or stay stable.
+        Parsed generated answers, runs Judges in parralel for a single question across multiple runs
+        returns accuracy report
         """
 
-        tasks = [
-            self.execute_multi_axis_evaluation_async(source_content, paste_content)
-            for _ in range(i_iterations)
-        ]
-
-        completed_runs = await asyncio.gather(*tasks)
-
-        raw_runs_history = [run for run in completed_runs if run is not None]
-        if not raw_runs_history:
-            logger.error("All instances of evaluations runs failedd. Cannot calculate LLM's stability statistics")
+        try:
+            raw_answers: dict[str, Any] = json.loads(paste_content)
+        except Exception as parse_error:
+            logger.error(f"Failed to parse paste_content string to map execution rubric: {parse_error}")
             return {}
         
-        compiled_question_map: dict[str, dict[str, Any]] = {}
-        for item in self._yield_all_items(raw_runs_history):
-            question_text = item.get("question")
-            if not question_text:
-                continue
+        rubric_items: list[RubricItemConfig] = []
+        for index, (question, _) in enumerate(raw_answers.items(), start=1):
+            strategy = self._infer_evaluation_strategy(question)
+            rubric_items.append(RubricItemConfig(
+                id=f"Check.{index}",
+                question=question,
+                strategy=strategy
+            ))
 
-            if question_text not in compiled_question_map:
-                compiled_question_map[question_text] = {
-                    "verdicts": [],
-                    "justifications": [],
-                    "strategy": self._infer_evaluation_strategy(question_text)
-                }
+        if not rubric_items:
+            return {}
+        
+        audit_registry: dict[str, ItemAuditStream] = {
+            item.id: ItemAuditStream(
+                item_id=item.id,
+                question=item.question,
+                strategy=item.strategy,
+                iterations=i_iterations
+            )
+            for item in rubric_items
+        }
+
+        semaphore = asyncio.Semaphore(10)
+
+        async def worker_task(item_id: str, question: str, run_index: int) -> tuple[str, int, str, str]:
+            """
+            Helper function that handles single grading call to Judge
+            """
+
+            async with semaphore:
+                user_prompt = (
+                    f"CHECKPOINT REQUIREMENT TO EVALUATE:\n{question}\n\n"
+                    f"[SOURCE DOCUMENT CONTEXT]\n{source_content}\n\n"
+                    f"[COMPLIANCE OUTPUT TO EVALUATE]\n{paste_content}"
+                )
+                try:
+                    response: ComplianceScoringSchema = await self.provider.generate_structured_async(
+                        prompt=user_prompt,
+                        system_instruction=self.system_instruction,
+                        response_schema=ComplianceScoringSchema
+                    )
+                    if response:
+                        return item_id, run_index, response.answer, response.justification
+                
+                except Exception as execution_error:
+                    logger.error(f"Async evaluation fault on item {item_id}, run {run_index}: {execution_error}")
+                    return item_id, run_index, "No", f"Execution Exception Intercepted: {execution_error}"
+                
+                return item_id, run_index, "No", "Omitted due to empty response."
             
-            compiled_question_map[question_text]["verdicts"].append(item.get("answer", "No"))
-            compiled_question_map[question_text]["justifications"].append(item.get("justification", ""))
+        tasks = [
+            worker_task(stream.item_id, stream.question, run_index)
+            for stream in audit_registry.values()
+            for run_index in range(i_iterations)
+        ]
+            
+        # Fire all API tasks in parralel!
+        results = await asyncio.gather(*tasks)
 
-        final_metrics_report = {
+        for item_id, run_index, verdict, justification in results:
+            stream = audit_registry[item_id]
+            stream.verdicts[run_index] = verdict
+            stream.justifications[run_index] = justification 
+
+        item_metrics = [stream.compute_reliability() for stream in audit_registry.values()]
+
+        global_gwet_average = 0.0
+        if item_metrics:
+            global_gwet_average = sum(metric["gwets_ac1_gamma"] for metric in item_metrics) / len(item_metrics)
+
+        return {
             "metadata": {
                 "profile_prefix": prefix_label,
                 "execution_timestamp": datetime.now().isoformat(),
-                "total_runs_i": len(raw_runs_history),
-                "global_fleiss_kappa": 0.0
+                "total_runs_i": i_iterations,
+                "global_gwets_ac1": round(global_gwet_average, 4)
             },
-            "item_level_stability_metrics": []
+            "item_level_stability_metrics": item_metrics
         }
-
-        verdict_matrix_for_kappa = []
-        for question_text, data in compiled_question_map.items():
-            verdict_list = data["verdicts"]
-            strategy = data["strategy"]
-            verdict_matrix_for_kappa.append(verdict_list)
-
-            final_metrics_report["item_level_stability_metrics"].append({
-                "question": question_text,
-                "inferred_strategy": strategy,
-                "percentage_agreement_pa": round(calculate_percentage_agreement(verdict_list), 2),
-                "gwets_ac1_gamma": round(calculate_gwets_ac1(verdict_list), 4),
-                "reasoning_stability_r_stab": round(calculate_reasoning_stability(data["justifications"], strategy), 2),
-                "raw_verdict_distribution": dict(Counter(verdict_list))
-            })
-
-        if verdict_matrix_for_kappa:
-            final_metrics_report["metadata"]["global_fleiss_kappa"] = round(
-                calculate_fleiss_kappa(verdict_matrix_for_kappa), 4
-            )
-        
-        return final_metrics_report

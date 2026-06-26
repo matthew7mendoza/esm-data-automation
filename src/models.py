@@ -1,15 +1,12 @@
 """
-Every file in this repo relies on these schema definitions
-Data validation and error contracts
+This file defines the standard data structures, rules, and custom errors
 """
 
 from typing import Literal 
 from pydantic import BaseModel, Field
 
 
-# =================
 # Error Boundaries
-# =================
 
 class SpearAutomationError(Exception):
     """
@@ -42,35 +39,43 @@ class AgentExecutionError(SpearAutomationError):
     """
     pass
 
-# =================
 # Pydantic Schemas
-# =================
+
+class RubricItemConfig(BaseModel):
+    """
+    Defines and validates the setup rules for a single test question
+    for the LLM Judge
+    """
+
+    id: str = Field(..., description="The unique identifier for the question (for example, '1.1', or '2.A').")
+    question: str = Field(..., description="The question text that the AI needs to check for accuracy.")
+    strategy: Literal["Numeric", "Quote", "Assertion"] = Field(..., description="The method the AI should use to look for the answer (looking for a number, a direct quote, or a general fact).")
 
 class NoveltyEntrySchema(BaseModel):
-
     """
-    Evaluation of a single generated research statement
-    from the LLM's output
+    Stores the quality scores for how unqiue and useful the 
+    AI-generated statement is.
     """
 
     relevance: Literal[0, 1] = Field(
-        ..., description="Hierarchical gate. If 0, all other sub-scores must be 0."
+        ..., description="Indicates if the statement is relevant (1) or not (0). If this is 0, all the other sub-scores must be 0."
     )
-    originality: int = Field(..., ge=0, le=3, description="Score 0-3.")
-    gap_addressing: int = Field(..., ge=0, le=3, description="Score 0-3.")
-    non_obviousness: int = Field(..., ge=0, le=3, description="Score 0-3.")
+    originality: int = Field(..., ge=0, le=3, description="The score for originality, from 0 (lowest) to 3 (highest).")
+    gap_addressing: int = Field(..., ge=0, le=3, description="The score for how well it solves an unanswered problem, from 0 to 3")
+    non_obviousness: int = Field(..., ge=0, le=3, description="The score for how unique or unexpected the idea is, from 0 to 3.")
 
 class ComplianceScoringSchema(BaseModel):
+    """
+    Tracks the AI's grading results and text explanations 
+    for a single question
+    """
 
-    """
-    Audit metric tracking for the LLM
-    """
-    question: str = Field(..., description="The rubric compliance verification question.")
-    justification: str = Field(..., description="Natural language justification trace.")
-    answer: Literal["Yes", "No"] = Field(..., description="Strict binary compliance verdict.")
+    item_id: str = Field(..., description="The unique identifier for the question being checked.")
+    question: str = Field(..., description="The text of the question that was being evaluated.")
+    justification: str = Field(..., description="The explanation written by the AI Judge justifying its final grade.")
+    answer: Literal["Yes", "No"] = Field(..., description="The final answer, must be a strict 'Yes' or 'No'.")
 
 class ComplianceCategoryGroup(BaseModel):
-
     """
     A collection of grouped compliance rules.
     """
@@ -79,26 +84,24 @@ class ComplianceCategoryGroup(BaseModel):
     items: list[ComplianceScoringSchema]
 
 class MasterAuditPayloadSchema(BaseModel):
-
     """
     Validation container for multiple LLM evaluation loops.
+    Holds complete set of categorized test results from the AI evaluation loop (Judge)
     """
 
     categories: list[ComplianceCategoryGroup]
 
 class AnswerPair(BaseModel):
-
     """
-    Maps an isolated configuration form question to its extracted answer string.
+    Maps a single form question with the answer the AI found for it
     """
 
     question: str = Field(..., description="The exact form question.")
-    answer: str = Field(..., description="The extracted answer text.")
+    answer: str = Field(..., description="The answer text that was extracted from the source documents.")
 
 class FormResponses(BaseModel):
-
     """
-    Validates the output generation layer or metadata documentation templates.
+    Validates the final set of answers written by the AI for a template form.
     """
 
     extracted_answers: list[AnswerPair] = Field(

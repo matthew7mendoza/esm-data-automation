@@ -16,8 +16,8 @@ from typing import Any
 import streamlit as st
 import yaml
 from dotenv import load_dotenv
-from google import genai
 
+from src.providers import get_provider, LLMProvider
 from src.generator import DocumentGenerator
 from src.judge import LLMJudge
 from src.document import extract_text, EXTRACTOR_MAP
@@ -27,6 +27,21 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 load_dotenv()
+
+MODEL_CONFIGURATIONS = {
+    "Gemini": {
+        "name": "gemini"
+    },
+    "GPT-4o": {
+        "name": "openai",
+        "model_name": "gpt-4o"
+    },
+    "Nvidia Nemotron": {
+        "name": "openai",
+        "model_name": "blank for now",
+        "base_url": "blank for now"
+    }
+}
 
 def get_available_templates() -> list[str]:
     """
@@ -41,20 +56,13 @@ def get_available_templates() -> list[str]:
         data = yaml.safe_load(file)
         return list(data.get("DOCUMENT_TEMPLATES", {}).keys())   
        
-def init_client() -> genai.Client | None:
-    """
-    Gets Gemini API key from env
-    if key then intiate client
-    if not, return none
-    """
-
-    api_key = os.environ.get("GEMINI_API_KEY")
-    if not api_key:
-        return None
-    return genai.Client(api_key=api_key)
 
 
-def handle_document_generation(client: genai.Client, uploaded_files: list, target_doc: str) -> tuple[dict[str, Any], str] | tuple[None, None]:
+def handle_document_generation(
+    provider: LLMProvider,
+    uploaded_files: list,
+    target_doc: str
+) -> tuple[dict[str, Any], str] | tuple[None, None]:
     """
     Takes the uploaded files, saves into temporary folder.
     Extracts text,
@@ -70,7 +78,7 @@ def handle_document_generation(client: genai.Client, uploaded_files: list, targe
             )
 
         try:
-            generator = DocumentGenerator(client=client)
+            generator = DocumentGenerator(provider=provider)
             report = generator.generate_draft_from_directory(target_doc, temp_path)
 
             source_blocks = [
@@ -82,12 +90,12 @@ def handle_document_generation(client: genai.Client, uploaded_files: list, targe
 
             return report, combined_text
         
-        except CorruptedDocumentError as e:
-            st.error(f"Could not read one of the files because it was broken: {e}")
-        except SpearAutomationError as e:
-            st.error(f"The AI had trouble building the document: {e}")
-        except Exception as e:
-            st.error(f"Something unexpected happened: {e}")
+        except CorruptedDocumentError as error:
+            st.error(f"Could not read one of the files because it was broken: {error}")
+        except SpearAutomationError as error:
+            st.error(f"The AI had trouble building the document: {error}")
+        except Exception as error:
+            st.error(f"Something unexpected happened: {error}")
 
         return None, None
     
@@ -120,7 +128,7 @@ def render_missing_information(missing: list[str]) -> None:
 
 
 def execute_stability_audit(
-    client: genai.Client, 
+    provider: LLMProvider, 
     source_context: str,
     answers: dict[str, Any],
     iterations: int
@@ -132,7 +140,7 @@ def execute_stability_audit(
     answers_as_text = json.dumps(answers, indent=2)
 
     try:
-        judge = LLMJudge(client=client)
+        judge = LLMJudge(provider=provider)
         return asyncio.run(judge.run_stability_stress_test_async(
             source_content=source_context,
             paste_content=answers_as_text,
@@ -153,7 +161,7 @@ def execute_stability_audit(
     return None
 
 
-def handle_quality_audit(client: genai.Client, source_context: str, answers: dict[str, Any], iterations: int) -> None:
+def handle_quality_audit(provider: LLMProvider, source_context: str, answers: dict[str, Any], iterations: int) -> None:
     """
     Create new section for LLM Judge
     When this button is clicked it will make the AI grade the answers
@@ -167,7 +175,7 @@ def handle_quality_audit(client: genai.Client, source_context: str, answers: dic
         return
     
     with st.spinner(f"Running {iterations} tests..."):
-        metrics = execute_stability_audit(client, source_context, answers, iterations)
+        metrics = execute_stability_audit(provider, source_context, answers, iterations)
 
     if not metrics:
         return
@@ -194,15 +202,18 @@ def main() -> None:
         st.session_state.generator_report = None
     if "source_context" not in st.session_state:
         st.session_state.source_context = None
-
-    client = init_client()
-    if not client:
-        st.error("Unable to find AI api key in .env file")
-        return
     
     st.sidebar.header("Settings")
+    chosen_engine = st.sidebar.selectbox("Select AI Model", list(MODEL_CONFIGURATIONS.keys()))
     target_document = st.sidebar.selectbox("Chose a form template to fill out", get_available_templates())
     judge_iterations = st.sidebar.slider("How many times should the judge test?", 2, 10, 3)
+
+    try:
+        config = MODEL_CONFIGURATIONS[chosen_engine].copy()
+        active_provider = get_provider(**config)
+    except Exception as env_error:
+        st.error(f"Error: Unable to load provider LLM Api key")
+        return
 
     st.header(f"1. Generate {target_document}")
     uploaded_files = st.file_uploader(
@@ -213,7 +224,7 @@ def main() -> None:
 
     if st.button("Read Files & Write Answers", type="primary", disabled=not uploaded_files):
         with st.spinner("Reading your files and asking the AI to process them..."):
-            report, context = handle_document_generation(client, uploaded_files, target_document)
+            report, context = handle_document_generation(active_provider, uploaded_files, target_document)
             if report and context:
                 st.session_state.generator_report = report
                 st.session_state.source_context = context
@@ -235,7 +246,7 @@ def main() -> None:
             )
     
         handle_quality_audit(
-            client=client,
+            provider=active_provider,
             source_context=st.session_state.source_context,
             answers=st.session_state.generator_report.get("extracted_answers", {}),
             iterations=judge_iterations

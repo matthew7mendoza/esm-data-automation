@@ -12,6 +12,7 @@ from google import genai
 from google.genai import types
 from pydantic import ValidationError
 
+from src.providers import LLMProvider
 from src.models import(
     FormResponses,
     AgentExecutionError,
@@ -29,19 +30,10 @@ class DocumentGenerator:
     AI model read documents and puts specific answers into the questions
     """
 
-    def __init__(
-        self,
-        client: genai.Client,
-        model_name: str = "gemini-3.1-pro-preview",
-        temperature: float = 0.0
-    ):
-        
-        if not client:
-            raise ValueError("An active AI client must be provided.")
-        self.client = client
-        self.model_name = model_name
-        self.temperature = temperature
-
+    def __init__(self, provider: LLMProvider):
+        if not provider:
+            raise ValueError("An active LLM provider must be present!")
+        self.provider = provider
         self.instructions, self.templates = self._load_configuration_blueprints()
 
     def _load_configuration_blueprints(self) -> tuple[str, dict[str, Any]]:
@@ -66,37 +58,19 @@ class DocumentGenerator:
         """
 
         formatted_questions = "\n".join(f"- {question}" for question in target_questions)
-        user_prompt = f"QUESTIONS TO ANSWER:\n{formatted_questions}\n\nSOURCE DOCUMENT:\n{content_payload}"
-
-        config = types.GenerateContentConfig(
-            system_instruction=self.instructions,
-            temperature=self.temperature,
-            response_mime_type="application/json",
-            response_schema=FormResponses
-        )
+        user_prompt = f"QUESTIONS TO ANSWER: \n{formatted_questions}\n\nSOURCE DOCUMENT:\n{content_payload}"
 
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=user_prompt,
-                config=config
+            validated_data: FormResponses = self.provider.generate_structured(
+                prompt=user_prompt,
+                system_instruction=self.instructions,
+                response_schema=FormResponses
             )
         except Exception as api_error:
-            logger.error("Failed to communicate with AI API model.", exc_info=True)
+            logger.error("Failed to communicate with AI API model!", exc_info=True)
             raise AgentExecutionError("Could not get a response from the AI model API") from api_error
         
-        try:
-
-            if not response.text:
-                raise AgentExecutionError("The AI completed the request but returned an empty response.")
-            validated_data: FormResponses = response.parsed
-
-        except ValidationError as validation_error:
-            logger.error("The AI's response failed data validation rules.")
-            raise AgentExecutionError("The data returned from the AI contains invalid or unreadable data formats.") from validation_error
-        
         flat_answers = {item.question: item.answer for item in validated_data.extracted_answers}
-
         return {
             "extracted_answers": flat_answers,
             "missing_information": validated_data.missing_information

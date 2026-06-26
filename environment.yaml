@@ -2,10 +2,7 @@ name: esm_llm_env
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
-  - xarray
-  - matplotlib
-  - netcdf4
+  - python=3.12
   - jupyter
   - python-dotenv
   - pydantic
@@ -17,4 +14,5 @@ dependencies:
   - pip:
       - streamlit>=1.35.0
       - google-genai
+      - openai
       - "markitdown[all]"

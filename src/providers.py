@@ -1,0 +1,205 @@
+"""
+LLM Provider Protocols, Identifies which Provider is being used
+
+Abstracts any one provider so the application can switch
+between providers.
+"""
+
+import os 
+from typing import Any, Protocol, runtime_checkable
+from pydantic import BaseModel
+from google import genai
+from google.genai import types
+import openai
+
+@runtime_checkable
+class LLMProvider(Protocol):
+    """
+    Duck typing, any class that has the same methods
+    is automatically an LLMProvider.
+    Protocol is used to abstract LLM Provider
+    """
+
+    def generate_structured(
+        self,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[BaseModel]
+    ) -> Any: ...
+
+    async def generate_structured_async(
+        self,
+        prompt: str,
+        system_instruction: str, 
+        response_schema: type[BaseModel]
+    ) -> Any: ...
+
+
+class GeminiProvider:
+    """
+    Gemini API implementation, an LLMProvider
+    Connector for Google's Gemini models
+    """
+
+    def __init__(
+        self, 
+        api_key: str | None = None,
+        model_name: str = "gemini-3.1-pro-preview"
+    ):
+        key = api_key or os.environ.get("GEMINI_API_KEY")
+        self.client = genai.Client(api_key=key)
+        self.model_name = model_name
+
+    def generate_structured(
+        self,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[BaseModel]
+    ) -> Any:
+        """
+        Requests Gemini LLM to respond according to strict
+        response_schema
+        """
+
+        response = self.client.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=response_schema,
+                temperature=0.0
+            )
+        )
+        return response.parsed
+    
+    async def generate_structured_async(
+        self,
+        prompt: str,
+        system_instruction: str, 
+        response_schema: type[BaseModel]
+    ) -> Any:
+        """
+        Async function for LLM Judge, 
+        multiple evaluations simultaneously 
+        """
+
+        response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                response_mime_type="application/json",
+                response_schema=response_schema,
+                temperature=0.0
+            )
+        )
+        return response.parsed
+    
+
+class OpenAIProvider:
+    """
+    OpenAI API 
+    Also connects to Nvidia NIM and other providers 
+    that have the same format as OpenAI by changing base_url
+    """
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model_name: str = "gpt-4o",
+        base_url: str | None = None
+    ):
+        # Constructor method 
+        key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("NVIDIA_API_KEY")
+        self.client = openai.OpenAI(api_key=key, base_url=base_url)
+        self.async_client = openai.AsyncOpenAI(api_key=key, base_url=base_url)
+        self.model_name = model_name
+
+    def generate_structured(
+        self,
+        prompt: str,
+        system_instruction: str, 
+        response_schema: type[BaseModel]
+    ) -> Any:
+        """
+        Requests OpenAI to reply using strict response_schema
+        """
+
+        response = self.client.beta.chat.completions.parse(
+            model=self.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_instruction
+                },
+
+                {
+                    "role": "user", "content": prompt
+                }
+            ],
+            response_format=response_schema,
+            temperature=0.0
+        )
+        return response.choices[0].message.parsed
+    
+    async def generate_structured_async(
+        self,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[BaseModel]
+    ) -> Any:
+        """
+        Async function for LLM Judge, 
+        multiple evaluations simultaneously 
+        """
+
+        response = await self.async_client.beta.chat.completions.parse(
+            model=self.model_name,
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_instruction
+                },
+
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            response_format=response_schema,
+            temperature=0.0
+        )
+        return response.choices[0].message.parsed
+    
+
+_REGISTRY: dict[str, type[LLMProvider]] = {}
+
+def register_provider(name: str, provider_class: type[LLMProvider]) -> None:
+    """
+    Adds a new AI provider class to the system's list
+    """
+
+    _REGISTRY[name.lower()] = provider_class
+
+def get_provider(name: str | None = None, **kwargs) -> LLMProvider:
+    """
+    Looks at .env file to see what provider you want to use then sets
+    up the class. Default is "gemini"
+    """
+
+    provider_choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
+    provider_class = _REGISTRY.get(provider_choice.lower())
+
+    if not provider_class:
+        available_options = list(_REGISTRY.keys())
+        raise ValueError(
+            f"!!!: '{provider_choice} is not registered!.\n'"
+            f"Avaliable options are: {available_options}"
+        )
+    
+    # Instantiate class until the very end, until it's actually needed
+    return provider_class(**kwargs)
+
+register_provider("gemini", GeminiProvider)
+register_provider("openai", OpenAIProvider)
