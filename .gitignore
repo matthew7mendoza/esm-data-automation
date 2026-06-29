@@ -222,3 +222,9 @@ inputs/
 # Ignore raw compliance inputs and copy-pastes from scientists
 data/inputs/*
 !data/inputs/.gitkeep
+
+# Local SQLite Runtime Database
+data/esm_form_automation.db
+data/*.db
+data/*.db-wal
+data/*.db-shm
