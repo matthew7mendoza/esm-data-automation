@@ -4,20 +4,7 @@ channels:
 dependencies:
   - python=3.12
   - jupyter
-  - python-dotenv
-  - pydantic
-  - pyyaml
-  - fastapi           
-  - uvicorn           
-  - python-multipart 
-  - pyprojroot
   - ffmpeg
   - pip
   - pip:
-      - streamlit>=1.35.0
-      - google-genai
-      - openai
-      - "markitdown[all]"
-      - sqlmodel
-      - aiosqlite
-      - asyncpg
+      - -e .

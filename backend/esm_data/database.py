@@ -3,14 +3,15 @@ Database configuration & session management
 """
 
 import os
-from pyprojroot import here
+from importlib.resources import files
+from pathlib import Path
 from collections.abc import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-PROJECT_ROOT = here()
-DEFAULT_DB_PATH = PROJECT_ROOT / "spear_automation.db"
+PROJECT_ROOT = Path(str(files("backend"))).parent
+DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "esm_form_automation.db"
 DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{DEFAULT_DB_PATH}")
 
 

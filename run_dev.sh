@@ -9,11 +9,11 @@ if lsof -t -i:8000 >/dev/null 2>&1; then
 fi
 
 echo "Starting backend..."
-uvicorn api:app --reload --port 8000 &
+uvicorn backend.api:app --reload --port 8000 &
 
 sleep 3
 
 echo "Starting frontend..."
-streamlit run app.py
+streamlit run frontend/app.py
 
 wait

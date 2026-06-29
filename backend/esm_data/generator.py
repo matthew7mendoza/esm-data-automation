@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 import yaml
 
-from src.config.providers import LLMProvider
-from src.config.models import(
+from backend.esm_data.providers import LLMProvider
+from backend.esm_data.models import(
     FormResponses,
     AgentExecutionError,
     AgentConfigurationError,
@@ -19,7 +19,7 @@ from src.config.models import(
     CorruptedDocumentError    
 )
 
-from src.parsing.document import extract_text, EXTRACTOR_MAP
+from backend.esm_data.document import extract_text, EXTRACTOR_MAP
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +38,10 @@ class DocumentGenerator:
         """
         Loads the system prompts and document questions from local templates.yaml
         """
-        
-        config_path = files("src.config") / "templates.yaml"
+        ###ALERT
+        ### ALERT
+        ### UPDATE PATH WHEN YOU EVENTUALLY CHANGE THE NAMRE
+        config_path = Path(str(files("backend.esm_data"))) / "templates.yaml"
         if not config_path.exists():
             raise AgentConfigurationError(f"The templates.yaml file is missing at: {config_path.resolve()}")
         

@@ -3,9 +3,10 @@ FastAPI backend
 uvicorn api:app --reload --port 8000
 """
 
-from seed import seed_data_from_yaml
+from backend.seed import seed_data_from_yaml
 import asyncio 
 from pathlib import Path
+from importlib.resources import files
 from typing import Any
 from fastapi import (
     FastAPI, 
@@ -25,20 +26,21 @@ import uuid
 from fastapi.responses import JSONResponse
 import json
 from concurrent.futures import ProcessPoolExecutor
-from pyprojroot import here
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from src.config.database import async_session_creator, init_db_tables, get_db_session
-from src.config.db_models import FormTemplate, TemplateQuestion, Task
+from backend.esm_data.database import async_session_creator, init_db_tables, get_db_session
+from backend.esm_data.db_models import FormTemplate, TemplateQuestion, Task
 
-from src.config.providers import get_provider
-from src.core.generator import DocumentGenerator
-from src.core.judge import LLMJudge
-from src.parsing.document import extract_text, EXTRACTOR_MAP
-from src.config.models import AuditRequest, TaskStatusResponse, TemplateCreateRequest
+from backend.esm_data.providers import get_provider
+from backend.esm_data.generator import DocumentGenerator
+from backend.esm_data.judge import LLMJudge
+from backend.esm_data.document import extract_text, EXTRACTOR_MAP
+from backend.esm_data.models import AuditRequest, TaskStatusResponse, TemplateCreateRequest
 
-RUN_DIR = here() / "data" / "runtime_staging"
+PROJECT_ROOT = Path(str(files("backend"))).parent
+RUN_DIR = PROJECT_ROOT / "data" / "runtime_staging"
+
 
 cpu_process_pool = ProcessPoolExecutor(max_workers=2)
 

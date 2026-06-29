@@ -2,19 +2,20 @@ import asyncio
 import json
 import logging
 from importlib.resources import files
+from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass, field, InitVar
 from datetime import datetime
 from typing import Any
 import yaml
 
-from src.config.providers import LLMProvider
-from src.config.models import (
+from backend.esm_data.providers import LLMProvider
+from backend.esm_data.models import (
     ComplianceScoringSchema,
     RubricItemConfig,
     AgentConfigurationError
 )
-from src.parsing.metrics import (
+from backend.esm_data.metrics import (
     calculate_gwets_ac1, 
     calculate_percentage_agreement,
     calculate_reasoning_stability
@@ -84,8 +85,10 @@ class LLMJudge:
         """
         Reads system instructionsfor the judge from templates.yaml file
         """
-
-        config_path = files("src.config") / "templates.yaml"
+        ### POTENTIAL NAME CHANGE, BEWARE POTENTIAL NAME CHANGE
+        ### WHEN YOU CHANGE THE NAME CHANGE UPDATE THE DIRECTORY PATH
+        ## ALERT
+        config_path = Path(str(files("backend.esm_data"))) / "templates.yaml"
         if not config_path.exists():
             raise AgentConfigurationError(f"templates.yaml file missing at path: {config_path.resolve()}")
         

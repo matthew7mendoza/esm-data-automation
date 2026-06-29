@@ -5,7 +5,7 @@ Convert files into structured string formats
 import logging
 from pathlib import Path
 from markitdown import MarkItDown
-from src.config.models import DocumentExtractionError, CorruptedDocumentError
+from backend.esm_data.models import DocumentExtractionError, CorruptedDocumentError
 
 logger = logging.getLogger(__name__)
 _converter = MarkItDown()
