@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass, field, InitVar
 from datetime import datetime
-from typing import TypedDict, never
+from typing import TypedDict, Never
 import yaml
 
 from backend.esm_data.providers import LLMProvider
@@ -138,14 +138,14 @@ class LLMJudge:
         paste_content: str,
         prefix_label: str,
         i_iterations: int = 5
-    ) -> AuditStressTestReport | dict[str, never]:
+    ) -> AuditStressTestReport | dict[str, Never]:
         """
         Parsed generated answers, runs Judges in parralel for a single question across multiple runs
         returns accuracy report
         """
 
         try:
-            raw_answers: dict[str, Any] = json.loads(paste_content)
+            raw_answers: dict[str, str] = json.loads(paste_content)
         except Exception as parse_error:
             logger.error(f"Failed to parse paste_content string to map execution rubric: {parse_error}")
             return {}

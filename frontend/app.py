@@ -285,10 +285,10 @@ def main() -> None:
     if st.session_state.job_running and "pending_generation" in st.session_state:
         args = st.session_state.pop("pending_generation")
         send_generation_request(
-            args["target_document"],
-            args["chosen_engine"],
-            args["uploaded_files"],
-            args["custom_name"]
+            target_document=args["target_document"],
+            chosen_engine=args["chosen_engine"],
+            uploaded_files=args["uploaded_files"],
+            custom_name=args["custom_name"]
         )
         st.session_state.job_running = False
         st.rerun()

@@ -11,7 +11,11 @@ fi
 echo "Starting backend..."
 uvicorn backend.api:app --reload --port 8000 &
 
-sleep 3
+echo "Waiting for backend port 8000 to open..."
+while ! lsof -t -i:8000 >/dev/null 2>&1; do
+    sleep 0.5
+done
+sleep 1.5 
 
 echo "Starting frontend..."
 streamlit run frontend/app.py

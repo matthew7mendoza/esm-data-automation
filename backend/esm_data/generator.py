@@ -39,7 +39,7 @@ class DocumentGenerator:
         self.provider = provider
         self.instructions, self.templates = self._load_configuration_blueprints()
 
-    def _load_configuration_blueprints(self) -> tuple[str, dict[str, Any]]:
+    def _load_configuration_blueprints(self) -> tuple[str, dict[str, str]]:
         """
         Loads the system prompts and document questions from local templates.yaml
         """
@@ -57,7 +57,7 @@ class DocumentGenerator:
         except Exception as yaml_error:
             raise AgentConfigurationError("Unable to read / parse templates.yaml file. Check that format is correct.") from yaml_error
         
-    def execute_extraction(self, target_questions: list[str], content_payload: str) -> dict[str, Any]:
+    def execute_extraction(self, target_questions: list[str], content_payload: str) -> dict[str, str]:
         """
         Sends the document text and list of questions to AI,
         forcing AI to return strict JSON response
@@ -82,7 +82,7 @@ class DocumentGenerator:
             "missing_information": validated_data.missing_information
         }
     
-    def generate_draft_from_directory(self, target_document_type: str, input_dir: Path | str) -> dict[str, Any]:
+    def generate_draft_from_directory(self, target_document_type: str, input_dir: Path | str) -> dict[str, str]:
         """
         Finds all supported files in a folder, extracts their text, combines them together, sends to the AI
         """

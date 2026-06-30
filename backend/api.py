@@ -208,10 +208,10 @@ async def generate_document(
 
         background_tasks.add_task(
             run_heavy_processing,
-            task_id,
-            target_doc.upper(),
-            model_provider,
-            task_staging_path
+            task_id=task_id,
+            target_doc=target_doc.upper(),
+            model_provider=model_provider,
+            staging_path=task_staging_path
         )
 
         return JSONResponse(
