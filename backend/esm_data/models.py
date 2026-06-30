@@ -3,7 +3,7 @@ This file defines the standard data structures, rules, and custom errors
 """
 
 from typing import Literal, TypedDict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # Error Boundaries
@@ -47,6 +47,8 @@ class RubricItemConfig(BaseModel):
     for the LLM Judge
     """
 
+    model_config = ConfigDict(frozen=True)
+
     id: str = Field(..., description="The unique identifier for the question (for example, '1.1', or '2.A').")
     question: str = Field(..., description="The question text that the AI needs to check for accuracy.")
     strategy: Literal["Numeric", "Quote", "Assertion"] = Field(..., description="The method the AI should use to look for the answer (looking for a number, a direct quote, or a general fact).")
@@ -56,6 +58,8 @@ class NoveltyEntrySchema(BaseModel):
     Stores the quality scores for how unqiue and useful the 
     AI-generated statement is.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     relevance: Literal[0, 1] = Field(
         ..., description="Indicates if the statement is relevant (1) or not (0). If this is 0, all the other sub-scores must be 0."
@@ -70,6 +74,8 @@ class ComplianceScoringSchema(BaseModel):
     for a single question
     """
 
+    model_config = ConfigDict(frozen=True)
+
     item_id: str = Field(..., description="The unique identifier for the question being checked.")
     question: str = Field(..., description="The text of the question that was being evaluated.")
     justification: str = Field(..., description="The explanation written by the AI Judge justifying its final grade.")
@@ -80,6 +86,8 @@ class ComplianceCategoryGroup(BaseModel):
     A collection of grouped compliance rules.
     """
 
+    model_config = ConfigDict(frozen=True)
+
     category_name: str
     items: list[ComplianceScoringSchema]
 
@@ -89,12 +97,16 @@ class MasterAuditPayloadSchema(BaseModel):
     Holds complete set of categorized test results from the AI evaluation loop (Judge)
     """
 
+    model_config = ConfigDict(frozen=True)
+
     categories: list[ComplianceCategoryGroup]
 
 class AnswerPair(BaseModel):
     """
     Maps a single form question with the answer the AI found for it
     """
+
+    model_config = ConfigDict(frozen=True)
 
     question: str = Field(..., description="The exact form question.")
     answer: str = Field(..., description="The answer text that was extracted from the source documents.")
@@ -103,6 +115,9 @@ class FormResponses(BaseModel):
     """
     Validates the final set of answers written by the AI for a template form.
     """
+
+    model_config = ConfigDict(frozen=True)
+
 
     extracted_answers: list[AnswerPair] = Field(
         ..., description="List mapping form questions to extracted answers."
@@ -115,6 +130,9 @@ class ExtractionReport(TypedDict):
     """
     Explicit typedict for AI generator output
     """
+
+    model_config = ConfigDict(frozen=True)
+
     extracted_answers: dict[str, str]
     missing_information: list[str]
 
@@ -122,6 +140,8 @@ class TaskStatusResponse(BaseModel):
     """
     How the data should look when sent to frontend
     """
+
+    model_config = ConfigDict(frozen=True)
 
     task_id: str
     status: str
@@ -135,6 +155,9 @@ class AuditRequest(BaseModel):
     Pydantic schema handle input validation for JSON endpoints
     """
 
+    model_config = ConfigDict(frozen=True)
+
+
     source_context: str
     answers: dict[str, str]
     iterations: int = 3
@@ -144,6 +167,8 @@ class TemplateCreateRequest(BaseModel):
     Validates incoming JSON payload required to dynamically
     register a new custom form layout in the databse
     """
+
+    model_config = ConfigDict(frozen=True)
 
     name: str = Field(..., description="The unique name of the document form (e.g., 'DOI').")
     description: str | None = Field(None, description="Optional high-level technical description.")

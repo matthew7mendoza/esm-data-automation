@@ -41,6 +41,10 @@ class GeminiProvider:
     Connector for Google's Gemini models
     """
 
+    __slots__ = ("client", "model_name")
+
+
+
     def __init__(
         self, 
         api_key: str | None = None,
@@ -49,6 +53,14 @@ class GeminiProvider:
         key = api_key or os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=key)
         self.model_name = model_name
+    
+    def __repr__(self) -> str:
+        """Debuger output"""
+        return f"GeminiProvider(model_name={self.model_name!r})"
+    
+    def __str__(self) -> str:
+        """Readable log output string"""
+        return f"Gemini Provider Engine [Active Model: {self.model_name}]"
 
     def generate_structured[T: BaseModel](
         self,
@@ -105,6 +117,8 @@ class OpenAIProvider:
     that have the same format as OpenAI by changing base_url
     """
 
+    __slots__ = ("client", "async_client", "model_name")
+
     def __init__(
         self,
         api_key: str | None = None,
@@ -116,6 +130,15 @@ class OpenAIProvider:
         self.client = openai.OpenAI(api_key=key, base_url=base_url)
         self.async_client = openai.AsyncOpenAI(api_key=key, base_url=base_url)
         self.model_name = model_name
+
+    def __repr__(self) -> str:
+        """Debugger output"""
+        return f"OpenAIProvider(model_name={self.model_name!r})"
+
+    def __str__(self) -> str:
+        """log output string"""
+        return f"OpenAI-like provider engine [Active Model: {self.model_name}]"
+    
 
     def generate_structured[T: BaseModel](
         self,

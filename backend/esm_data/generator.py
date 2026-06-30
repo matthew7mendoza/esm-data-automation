@@ -33,6 +33,8 @@ class DocumentGenerator:
     AI model read documents and puts specific answers into the questions
     """
 
+    __slots__ = ("provider", "instructions", "templates")
+
     instructions: str
     templates: dict[str, TemplateConfig]
 
@@ -41,6 +43,14 @@ class DocumentGenerator:
             raise ValueError("An active LLM provider must be present!")
         self.provider = provider
         self.instructions, self.templates = self._load_configuration_blueprints()
+
+    def __repr__(self) -> str:
+        """technical output string"""
+        return f"DocumentGenerator(provider={self.provider})"
+
+    def __str__(self) -> str:
+        """readable representation string"""
+        return f"Document Generator Module [Bound to Engine: {self.provider.__class__.__name__}]"
 
     def _load_configuration_blueprints(self) -> tuple[str, TemplateConfig]:
         """

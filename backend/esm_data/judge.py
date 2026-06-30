@@ -47,6 +47,10 @@ class ItemAuditStream:
         self.verdicts = ["No"] * iterations
         self.justifications = ["Omitted due to execution failure."] * iterations
 
+    def __str__(self) -> str:
+        """logging string"""
+        return f"AuditStream[{self.item_id}] (Strategy: {self.strategy}) -> Questions: '{self.question[:40]}...'"
+
     def compute_reliability(self) -> dict[str, str | float | Counter[str]]:
         """
         Calculate if the AI is reliable for any specific question by looking 
@@ -85,6 +89,8 @@ class LLMJudge:
     LLM Judge which evaluates the AI's answers to the questions
     """
 
+    __slots__ = ("provider", "system_instruction")
+
     STRATEGY_KEYWORDS: dict[str, list[str]] = {
         "Numeric": ["count", "word", "total", "volume", "number"],
         "Quote": ["verbatim", "string", "quote", "text", "url"]
@@ -98,6 +104,14 @@ class LLMJudge:
             raise ValueError("An active LLM API key must be provided!")
         self.provider = provider
         self.system_instruction = self._load_judge_instructions()
+    
+    def __repr__(self) -> str:
+        """Technical output string"""
+        return f"LLMJudge(provider={self.provider!r})"
+    
+    def __str__(self) -> str:
+        """readable logging string"""
+        return f"LLM Judge Node [Activate Evaluator Engine: {self.provider.__class__.__name__}]"
 
     def _load_judge_instructions(self) -> str:
         """
