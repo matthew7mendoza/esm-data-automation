@@ -8,6 +8,7 @@ from importlib.resources import files
 from pathlib import Path
 from typing import Literal, Never, TypedDict
 
+import openai
 import yaml
 
 from backend.esm_data.metrics import (
@@ -138,8 +139,8 @@ class LLMJudge:
                 return data["JUDGE_INSTRUCTIONS"]
         except KeyError as key_error:
             raise AgentConfigurationError("The requred key 'JUDGE_INSTRUCTIONS' was missing inside of templates.yaml") from key_error
-        except Exception as yaml_error:
-            raise AgentConfigurationError("Failed to cleanly decode exterminal YAML runtime template structure.") from yaml_error
+        except (OSError, yaml.YAMLError) as serialization_error:
+            raise AgentConfigurationError("Failed to cleanly decode external YAML runtime template structure...") from serialization_error
         
     def _infer_evaluation_strategy(self, question_text: str) -> Literal["Numeric", "Quote", "Assertion"]:
         """
@@ -186,9 +187,9 @@ class LLMJudge:
 
                 return item_id, run_index, response.answer, response.justification
             
-            except Exception as execution_error:
-                logger.error(f"Async evaluation fault on item {item_id}, run {run_index}: {execution_error}")
-                return item_id, run_index, "No", f"Execution Exception Intercepted: {execution_error}"
+            except (openai.OpenAIError, ValueError, TypeError, RuntimeError) as api_operational_fault:
+                logger.error(f"Async evaluation operational fault on item {item_id}, run {run_index}: {api_operational_fault}")
+                return item_id, run_index, "No", f"Execution Exception Intercepted: {api_operational_fault}"
     
     async def run_stability_stress_test_async(
         self,
@@ -205,8 +206,8 @@ class LLMJudge:
 
         try:
             raw_answers: dict[str, str] = json.loads(paste_content)
-        except Exception as parse_error:
-            logger.error(f"Failed to parse paste_content string to map execution rubric: {parse_error}")
+        except json.JSONDecodeError as string_parse_fault:
+            logger.error(f"Failed to parse paste_content string to map execution rubric schema: {string_parse_fault}")
             return {}
         
         rubric_items: list[RubricItemConfig] = [
@@ -215,9 +216,9 @@ class LLMJudge:
                 question=question,
                 strategy=self._infer_evaluation_strategy(question),
             )
-            for index, (question, _) in enumerate(raw_answers.items(), start=1)
+            for index, (question, _) in enumerate(raw_answers.items()),
         ]
-
+        
         if not rubric_items:
             return {}
         

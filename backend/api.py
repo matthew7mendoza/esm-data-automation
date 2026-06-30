@@ -34,7 +34,7 @@ from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
 from backend.esm_data.document import EXTRACTOR_MAP, extract_text
 from backend.esm_data.generator import DocumentGenerator
 from backend.esm_data.judge import AuditStressTestReport, LLMJudge
-from backend.esm_data.models import AuditRequest, TaskStatusResponse, TemplateCreateRequest
+from backend.esm_data.models import AgentConfigurationError, AuditRequest, TaskStatusResponse, TemplateCreateRequest
 from backend.esm_data.providers import get_provider
 from backend.seed import seed_data_from_yaml
 
@@ -202,42 +202,51 @@ async def generate_document(
     task_staging_path.mkdir(parents=True, exist_ok=True)
 
     try:
-
         for uploaded_file in files:
             if not uploaded_file.filename:
                 continue
             file_disk_path = task_staging_path / Path(uploaded_file.filename).name
             content = await uploaded_file.read()
             await asyncio.to_thread(file_disk_path.write_bytes, content)
-        
+
+    except OSError as io_error:
+        if task_staging_path.exists():
+            shutil.rmtree(task_staging_path)
+        logger.error("Disk write fault encountered during file staging loop", exc_info=True)
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error happened while staging files on disk storage."
+        ) from io_error
+
+    try:
         new_task = Task(task_id=task_id, status="PENDING", custom_name=custom_name)
         session.add(new_task)
         await session.commit()
 
-        background_tasks.add_task(
-            run_heavy_processing,
-            task_id=task_id,
-            target_doc=target_doc.upper(),
-            model_provider=model_provider,
-            staging_path=task_staging_path
-        )
-
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content={"task_id": task_id, "status": "PENDING"}
-        )
-
-    except Exception as error:
+    except Exception as db_error:
         if task_staging_path.exists():
             shutil.rmtree(task_staging_path)
-        
-        logger.error("Failure during file staging loop", exc_info=True)
+        logger.error("Database tracking error while performing task", exc_info=True)
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="internal server error happened while staging scientific assets."
-        )
+            detail="Internal database fail occured while processing task record."
+        ) from db_error
     
+    background_tasks.add_task(
+        run_heavy_processing,
+        task_id=task_id,
+        target_doc=target_doc.upper(),
+        model_provider=model_provider,
+        staging_path=task_staging_path
+    )
 
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"task_id": task_id, "status": "PENDING"}
+    )
+    
 @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: str, session: AsyncSession = Depends(get_db_session)) -> TaskStatusResponse:
     """
@@ -305,7 +314,10 @@ async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> lis
     return result.all()
 
 @app.post("/api/audit")
-async def run_audit(payload: AuditRequest, model_provider: str = Query("gemini")) -> AuditStressTestReport | dict[str, Never]:
+async def run_audit(
+    payload: AuditRequest,
+    model_provider: str = Query("gemini")
+) -> AuditStressTestReport | dict[str, Never]:
     """
     Run stability test w/o blocking primary application
     """
@@ -313,10 +325,17 @@ async def run_audit(payload: AuditRequest, model_provider: str = Query("gemini")
     try:
         provider_instance = get_provider(name=model_provider)
         judge = LLMJudge(provider=provider_instance)
-    except Exception as error:
-        raise HTTPException(status_code=400, detail=f"LLM Judge Provider Failure: {error}")
+    
+    except(ValueError, AgentConfigurationError) as initialization_error:
+        logger.error("Failed to construct evaluator engine configuration mappings", exc_info=True)
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"LLM Judge Provider Failure: {initialization_error}"
+        ) from initialization_error
     
     answers_as_text = json.dumps(payload.answers, indent=2)
+
     try:
         metrics = await judge.run_stability_stress_test_async(
             source_content=payload.source_context,
@@ -325,6 +344,12 @@ async def run_audit(payload: AuditRequest, model_provider: str = Query("gemini")
             i_iterations=payload.iterations
         )
         return metrics
-    except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Stability Audit Failure: {str(error)}")
+    
+    except Exception as runtime_execution_error:
+        logger.error("Exception intercepted during execution of stability stress test loops", exc_info=True)
+
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Stability Audit Failure: {str(runtime_execution_error)}"
+        ) from runtime_execution_error
     

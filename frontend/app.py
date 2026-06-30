@@ -229,25 +229,23 @@ def on_history_change() -> None:
 
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
-        
+
         if response.status_code != 200:
             st.error("Failed to extract full analysis data from backend node.")
             return
-
+        
         full_job_payload = response.json()
         st.session_state.generator_report = full_job_payload.get("report")
         st.session_state.source_context = full_job_payload.get("source_context")
 
-    except Exception as network_error:
-        st.error(f"Network error trying to fetch historical file profile: {network_error}")
+    except requests.exceptions.RequestException as network_transport_fault:
+        logger.error("Network communication loss when trying to read historical entries", exc_info=True)
+        st.error(f"Network error trying to fetch historical file profile: {network_transport_fault}")
 
 def render_historical_sidebar() -> None:
     """
     Ask backend for past runs, then renders
     """
-
-    st.sidebar.markdown("---")
-    st.sidebar.header("History")
 
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=5)
@@ -257,7 +255,9 @@ def render_historical_sidebar() -> None:
             return
         
         past_tasks = response.json()
-        completed_tasks = [task for task in past_tasks if task.get("status") == "COMPLETED"]
+        completed_tasks = [
+            task for task in past_tasks if task.get("status") == "COMPLETED"
+        ]
 
         if not completed_tasks:
             st.sidebar.caption("No history")
@@ -270,7 +270,7 @@ def render_historical_sidebar() -> None:
         }
 
         st.session_state.task_mapping = task_options
-        options_list = ["-- Select Past Run"] + list(task_options.keys())
+        options_list = ["-- Select Past Run", *task_options]
 
         st.sidebar.selectbox(
             "Reload a past analysis:",
@@ -280,9 +280,9 @@ def render_historical_sidebar() -> None:
             disabled=st.session_state.job_running
         )
     
-    except Exception as error:
+    except requests.exceptions.RequestException as connection_offline_error:
+        logger.warning(f"Unable to read connection tracking indexes: {connection_offline_error}")
         st.sidebar.caption("History tracker offline!")
-
 
 
 def main() -> None:

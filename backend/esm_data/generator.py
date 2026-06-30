@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import TypedDict
 
+import openai
 import yaml
 
 from backend.esm_data.document import EXTRACTOR_MAP, extract_text
@@ -68,9 +69,9 @@ class DocumentGenerator:
             with open(config_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
             return data["DEFAULT_LLM_INSTRUCTIONS"], data["DOCUMENT_TEMPLATES"]
-        except Exception as yaml_error:
-            raise AgentConfigurationError("Unable to read / parse templates.yaml file. Check that format is correct.") from yaml_error
-        
+        except (OSError, yaml.YAMLError) as document_read_fault:
+            raise AgentConfigurationError("Unable to read / parse templates.yaml file. Check that format is correct.") from document_read_fault
+    
     def execute_extraction(self, target_questions: list[str], content_payload: str) -> dict[str, str]:
         """
         Sends the document text and list of questions to AI,
@@ -86,9 +87,9 @@ class DocumentGenerator:
                 system_instruction=self.instructions,
                 response_schema=FormResponses
             )
-        except Exception as api_error:
-            logger.error("Failed to communicate with AI API model!", exc_info=True)
-            raise AgentExecutionError("Could not get a response from the AI model API") from api_error
+        except (openai.OpenAIError, ValueError, TypeError, RuntimeError) as api_communication_fault:
+            logger.error("Failed to communicate with AI API backend model engines!", exc_info=True)
+            raise AgentExecutionError("Could not get a response from the AI model API") from api_communication_fault
         
         flat_answers = {item.question: item.answer for item in validated_data.extracted_answers}
         return {
