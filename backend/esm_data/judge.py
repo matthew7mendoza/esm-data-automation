@@ -133,6 +133,7 @@ class LLMJudge:
     
     async def _evaluate_single_node(
         self,
+        *,
         item_id: str,
         question: str,
         run_index: int,
@@ -213,12 +214,12 @@ class LLMJudge:
             
         tasks = [
             self._evaluate_single_node(
-                stream.item_id,
-                stream.question,
-                run_index,
-                source_content,
-                paste_content,
-                semaphore
+                item_id=stream.item_id,
+                question=stream.question,
+                run_index=run_index,
+                source_content=source_content,
+                paste_content=paste_content,
+                semaphore=semaphore
             )
             for stream in audit_registry.values()
             for run_index in range(i_iterations)

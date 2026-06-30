@@ -181,6 +181,7 @@ async def get_templates(session: AsyncSession = Depends(get_db_session)) -> list
         
 @app.post("/api/generate", status_code=status.HTTP_202_ACCEPTED)
 async def generate_document(
+    *,
     background_tasks: BackgroundTasks,
     target_doc: str = Form(...),
     model_provider: str = Form("gemini"),
