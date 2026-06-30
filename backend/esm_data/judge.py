@@ -6,7 +6,7 @@ from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass, field, InitVar
 from datetime import datetime
-from typing import TypedDict, Never
+from typing import Literal, TypedDict, Never
 import yaml
 
 from backend.esm_data.providers import LLMProvider
@@ -32,7 +32,7 @@ class ItemAuditStream:
     """
     item_id: str
     question: str
-    strategy: str
+    strategy: Literal["Numeric", "Quote", "Assertion"]
     iterations: InitVar[int]
 
     verdicts: list[str] = field(init=False)
@@ -47,7 +47,7 @@ class ItemAuditStream:
         self.verdicts = ["No"] * iterations
         self.justifications = ["Omitted due to execution failure."] * iterations
 
-    def compute_reliability(self) -> dict[str, str]:
+    def compute_reliability(self) -> dict[str, str | float | Counter[str]]:
         """
         Calculate if the AI is reliable for any specific question by looking 
         at the distribution of the test runs
@@ -85,7 +85,7 @@ class LLMJudge:
     LLM Judge which evaluates the AI's answers to the questions
     """
 
-    STRATEGY_KEYWORDS = {
+    STRATEGY_KEYWORDS: dict[str, list[str]] = {
         "Numeric": ["count", "word", "total", "volume", "number"],
         "Quote": ["verbatim", "string", "quote", "text", "url"]
     }
@@ -119,7 +119,7 @@ class LLMJudge:
         except Exception as yaml_error:
             raise AgentConfigurationError("Failed to cleanly decode exterminal YAML runtime template structure.") from yaml_error
         
-    def _infer_evaluation_strategy(self, question_text: str) -> str:
+    def _infer_evaluation_strategy(self, question_text: str) -> Literal["Numeric", "Quote", "Assertion"]:
         """
         Looks at the wording of the question to decide if the AI 
         should look for a number, quote, or a general fact
@@ -186,14 +186,14 @@ class LLMJudge:
             logger.error(f"Failed to parse paste_content string to map execution rubric: {parse_error}")
             return {}
         
-        rubric_items: list[RubricItemConfig] = []
-        for index, (question, _) in enumerate(raw_answers.items(), start=1):
-            strategy = self._infer_evaluation_strategy(question)
-            rubric_items.append(RubricItemConfig(
+        rubric_items: list[RubricItemConfig] = [
+            RubricItemConfig(
                 id=f"Check.{index}",
                 question=question,
-                strategy=strategy
-            ))
+                strategy=self._infer_evaluation_strategy(question),
+            )
+            for index, (question, _) in enumerate(raw_answers.items(), start=1)
+        ]
 
         if not rubric_items:
             return {}
@@ -209,8 +209,7 @@ class LLMJudge:
         }
 
         semaphore = asyncio.Semaphore(10)
-
-                
+     
             
         tasks = [
             self._evaluate_single_node(

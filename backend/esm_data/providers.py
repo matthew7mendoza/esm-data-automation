@@ -45,7 +45,7 @@ class GeminiProvider:
         self, 
         api_key: str | None = None,
         model_name: str = "gemini-3.1-pro-preview"
-    ):
+    ) -> None:
         key = api_key or os.environ.get("GEMINI_API_KEY")
         self.client = genai.Client(api_key=key)
         self.model_name = model_name
@@ -73,11 +73,12 @@ class GeminiProvider:
         )
         return response.parsed
     
+
     async def generate_structured_async[T: BaseModel](
         self,
         prompt: str,
         system_instruction: str, 
-        response_schema: type[BaseModel]
+        response_schema: type[T]
     ) -> T:
         """
         Async function for LLM Judge, 
@@ -94,7 +95,7 @@ class GeminiProvider:
                 temperature=0.0
             )
         )
-        return response.parsed
+        return response.parsed 
     
 
 class OpenAIProvider:
@@ -109,7 +110,7 @@ class OpenAIProvider:
         api_key: str | None = None,
         model_name: str = "gpt-4o",
         base_url: str | None = None
-    ):
+    ) -> None:
         # Constructor method 
         key = api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("NVIDIA_API_KEY")
         self.client = openai.OpenAI(api_key=key, base_url=base_url)

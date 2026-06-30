@@ -6,16 +6,15 @@ import os
 from importlib.resources import files
 from pathlib import Path
 from collections.abc import AsyncGenerator
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncEngine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 PROJECT_ROOT = Path(str(files("backend"))).parent
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "esm_form_automation.db"
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{DEFAULT_DB_PATH}")
+DATABASE_URL: str = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite///{DEFAULT_DB_PATH}")
 
-
-async_engine = create_async_engine(DATABASE_URL, echo=False, future=True)
+async_engine: AsyncEngine = create_async_engine(DATABASE_URL, echo=False, future=True)
 async_session_creator: async_sessionmaker[AsyncSession] = async_sessionmaker(
     async_engine, class_=AsyncSession, expire_on_commit=False
 )

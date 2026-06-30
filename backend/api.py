@@ -8,7 +8,7 @@ from backend.seed import seed_data_from_yaml
 import asyncio 
 from pathlib import Path
 from importlib.resources import files
-from typing import Any
+from typing import Never
 from fastapi import (
     FastAPI, 
     UploadFile,
@@ -35,7 +35,7 @@ from backend.esm_data.db_models import FormTemplate, TemplateQuestion, Task
 
 from backend.esm_data.providers import get_provider
 from backend.esm_data.generator import DocumentGenerator
-from backend.esm_data.judge import LLMJudge
+from backend.esm_data.judge import LLMJudge, AuditStressTestReport
 from backend.esm_data.document import extract_text, EXTRACTOR_MAP
 from backend.esm_data.models import AuditRequest, TaskStatusResponse, TemplateCreateRequest
 
@@ -43,7 +43,7 @@ PROJECT_ROOT = Path(str(files("backend"))).parent
 RUN_DIR = PROJECT_ROOT / "data" / "runtime_staging"
 
 logger = logging.getLogger(__name__)
-cpu_process_pool = ProcessPoolExecutor(max_workers=2)
+cpu_process_pool: ProcessPoolExecutor = ProcessPoolExecutor(max_workers=2)
 
 
 @asynccontextmanager
@@ -117,7 +117,7 @@ async def run_heavy_processing(
         
         task.status = "PROCESSING"
         await session.commit()
-        
+
         statement = (
             select(TemplateQuestion)
             .join(FormTemplate)
@@ -237,7 +237,7 @@ async def generate_document(
     
 
 @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str, session: AsyncSession = Depends(get_db_session)) -> dict[str, Any]:
+async def get_task_status(task_id: str, session: AsyncSession = Depends(get_db_session)) -> TaskStatusResponse:
     """
     Look up a specific tracking code inside db, 
     checks if AI is still writing, finished, or crashed
@@ -248,20 +248,19 @@ async def get_task_status(task_id: str, session: AsyncSession = Depends(get_db_s
     if not task:
         raise HTTPException(status_code=404, detail="The request job token does not exist.")
     
-    return {
-        "task_id": task.task_id,
-        "status": task.status,
-        "custom_name": task.custom_name,
-        "report": json.loads(task.report_json) if task.report_json else None,
-        "source_context": task.source_context,
-        "detail": task.detail
-    }
+    return TaskStatusResponse(
+        task_id=task.task_id,
+        status=task.status,
+        custom_name=task.custom_name,
+        report=json.loads(task.report_json) if task.report_json else None,
+        detail=task.detail
+    )
 
 @app.post("/api/templates", status_code=status.HTTP_201_CREATED)
 async def create_custom_template(
     payload: TemplateCreateRequest,
     session: AsyncSession = Depends(get_db_session)
-):
+) -> dict[str, str]:
     """
     Saves a brand new form template into the database
     making it instantly available
@@ -294,7 +293,7 @@ async def create_custom_template(
     }
 
 @app.get("/api/tasks", response_model=list[TaskStatusResponse])
-async def list_all_tasks(session: AsyncSession = Depends(get_db_session)):
+async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> list[Task]:
     """
     Gets every tracking ticket stored in db,
     allows scientists to look at their history of generated template records
@@ -304,7 +303,7 @@ async def list_all_tasks(session: AsyncSession = Depends(get_db_session)):
     return result.all()
 
 @app.post("/api/audit")
-async def run_audit(payload: AuditRequest, model_provider: str = Query("gemini")):
+async def run_audit(payload: AuditRequest, model_provider: str = Query("gemini")) -> AuditStressTestReport | dict[str, Never]:
     """
     Run stability test w/o blocking primary application
     """

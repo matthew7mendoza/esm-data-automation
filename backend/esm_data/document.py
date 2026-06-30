@@ -4,11 +4,12 @@ Convert files into structured string formats
 
 import logging
 from pathlib import Path
+from collections.abc import Callable
 from markitdown import MarkItDown
 from backend.esm_data.models import DocumentExtractionError, CorruptedDocumentError
 
 logger = logging.getLogger(__name__)
-_converter = MarkItDown()
+_converter: MarkItDown = MarkItDown()
 
 def _extract_plain_text(path: Path) -> str:
     """
@@ -35,7 +36,7 @@ def _extract_complex_doc(path: Path) -> str:
         logger.error(f"MarkItDown unable to parse {path.name}", exc_info=True)
         raise CorruptedDocumentError(f"Invalid structure mapping in: '{path.name}'") from val_error
     
-EXTRACTOR_MAP = {
+EXTRACTOR_MAP: dict[str, Callable[[Path], str]] = {
     ".txt": _extract_plain_text,
     ".md": _extract_plain_text,
     ".csv": _extract_plain_text,

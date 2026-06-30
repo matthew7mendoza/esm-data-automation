@@ -33,13 +33,16 @@ class DocumentGenerator:
     AI model read documents and puts specific answers into the questions
     """
 
+    instructions: str
+    templates: dict[str, TemplateConfig]
+
     def __init__(self, provider: LLMProvider):
         if not provider:
             raise ValueError("An active LLM provider must be present!")
         self.provider = provider
         self.instructions, self.templates = self._load_configuration_blueprints()
 
-    def _load_configuration_blueprints(self) -> tuple[str, dict[str, str]]:
+    def _load_configuration_blueprints(self) -> tuple[str, TemplateConfig]:
         """
         Loads the system prompts and document questions from local templates.yaml
         """

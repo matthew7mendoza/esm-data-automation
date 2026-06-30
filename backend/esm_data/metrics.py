@@ -6,6 +6,7 @@ The functions here determine whether the list of the Judge's evalautions are con
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from typing import Literal
 
 
@@ -55,9 +56,9 @@ def _extract_quote(text: str) -> str:
     return " ".join(quotes) if quotes else text
 
 def _extract_assertion(text: str) -> str:
-    return " ".join(re.sub(r"[^\w\s]", text).split())
+    return " ".join(re.sub(r"[^\w\s]", "", text).split())
 
-STRATEGY_REGISTRY = {
+STRATEGY_REGISTRY: dict[str, Callable[[str], str]] = {
     "Numeric": _extract_numeric,
     "Quote": _extract_quote,
     "Assertion": _extract_assertion

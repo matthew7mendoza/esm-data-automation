@@ -7,7 +7,8 @@ import logging
 import streamlit as st
 import requests
 import time
-from typing import Protocol
+from typing import Protocol, TypedDict
+from backend.esm_data.models import ExtractionReport
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,6 +19,14 @@ MODEL_CONFIGURATIONS = {
     "Gemini": "gemini",
     "Nvidia": "nemotron"
 }
+
+class TaskProfileDict(TypedDict):
+    task_id: str
+    status: str
+    custom_name: str | None
+    report: ExtractionReport | None
+    source_context: str | None
+    detail: str | None
 
 class UploadedFileProtocol(Protocol):
     name: str
@@ -42,7 +51,7 @@ def fetch_server_templates() -> list[str]:
     return ["DMP", "README"]
 
 
-def _get_task_profile(task_id: str) -> dict | None:
+def _get_task_profile(task_id: str) -> TaskProfileDict | None:
     """
     helper function Gets backend training tickets
     """
@@ -378,103 +387,5 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-# def main() -> None:
-#     """
-#     Main
-#     """
 
-#     st.set_page_config(page_title="ESM Data Automation", layout="wide")
-#     st.title("ESM Data Automation")
-#     st.markdown("Automatically answer templates w/ uploaded info + check for accuracy using AI")
-
-#     if "generator_report" not in st.session_state:
-#         st.session_state.generator_report = None
-#     if "source_context" not in st.session_state:
-#         st.session_state.source_context = None
-#     if "job_running" not in st.session_state:
-#         st.session_state.job_running = False
-
-#     render_historical_sidebar()
-    
-#     st.sidebar.header("Settings")
-    
-#     chosen_engine = st.sidebar.selectbox(
-#         "Select AI Model",
-#         list(MODEL_CONFIGURATIONS.keys()),
-#         disabled=st.session_state.job_running
-#     )
-#     target_document = st.sidebar.selectbox(
-#         "Chose a form template to fill out",
-#         fetch_server_templates(),
-#         disabled=st.session_state.job_running
-#     )
-#     judge_iterations = st.sidebar.slider(
-#         "How many times should the judge test?",
-#         2, 10, 3,
-#         disabled=st.session_state.job_running
-#     )
-
-#     st.header(f"1. Generate {target_document}")
-#     uploaded_files = st.file_uploader(
-#         "Drop you scientific data, READMEs, publications, ect... here:",
-#         accept_multiple_files=True,
-#         disabled=st.session_state.job_running
-#     )
-
-#     custom_name = st.text_input(
-#         "Label this extraction run (optional):", 
-#         placeholder="ReadME Spear project #1",
-#         disabled=st.session_state.job_running
-#     )
-
-#     if st.button(
-#         "Read Files & Write Answers",
-#         type="primary",
-#         disabled=not uploaded_files or st.session_state.job_running
-#     ):
-#         st.session_state.job_running = True
-#         st.session_state.pending_generation = {
-#             "target_document": target_document,
-#             "chosen_engine": chosen_engine,
-#             "uploaded_files": uploaded_files,
-#             "custom_name": custom_name
-#         }
-#         st.rerun()
-
-#     if st.session_state.job_running and "pending_generation" in st.session_state:
-#         args = st.session_state.pop("pending_generation")
-#         send_generation_request(
-#             args["target_document"],
-#             args["chosen_engine"],
-#             args["uploaded_files"],
-#             args["custom_name"]
-#         )
-#         st.session_state.job_running = False
-#         st.rerun()
-
-#     if not st.session_state.generator_report:
-#         return
-    
-#     st.markdown("---")
-#     st.header("2. LLM Judge")
-#     st.markdown("Run the judge test to quantify the accuracy of {taget_document}")
-
-#     if st.button(
-#         "Run Stability Test",
-#         disabled=st.session_state.job_running
-#     ):
-#         st.session_state.job_running = True
-#         st.session_state.pending_audit = {
-#             "chosen_engine": chosen_engine,
-#             "judge_iterations": judge_iterations
-#         }
-#         st.rerun()
-
-#     if st.session_state.job_running and "pending_audit" in st.session_state:
-#         args = st.session_state.pop("pending_audit")
-#         current_answers = st.session_state.generator_report.get("extracted_answers", {})
-#         send_audit_request(args["chosen_engine"], current_answers, args["judge_iterations"])
-#         st.session_state.job_running = False
-#         st.rerun()
-    
 
