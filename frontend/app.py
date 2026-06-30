@@ -4,11 +4,15 @@ takes files and gives to backend
 """
 
 import logging
-import streamlit as st
-import requests
 import time
 from typing import Protocol, TypedDict
+
+import requests
+import streamlit as st
+
 from backend.esm_data.models import ExtractionReport
+
+__all__ = ["main"]
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

@@ -3,11 +3,29 @@ This file defines the standard data structures, rules, and custom errors
 """
 
 from typing import Literal, TypedDict
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+#namespace
+__all__ = [
+    "SpearAutomationError",
+    "DocumentExtractionError",
+    "CorruptedDocumentError",
+    "AgentConfigurationError",
+    "AgentExecutionError",
+    "RubricItemConfig",
+    "NoveltyEntrySchema",
+    "ComplianceScoringSchema",
+    "ComplianceCategoryGroup",
+    "MasterAuditPayloadSchema",
+    "AnswerPair",
+    "FormResponses",
+    "ExtractionReport",
+    "TaskStatusResponse",
+    "AuditRequest",
+    "TemplateCreateRequest",
+]
 
-# Error Boundaries
-
+# ----------Error Boundaries----------------
 class SpearAutomationError(Exception):
     """
     Base exception for all errors within SPEAR automation project.
@@ -39,8 +57,7 @@ class AgentExecutionError(SpearAutomationError):
     """
     pass
 
-# Pydantic Schemas
-
+# ---------Pydantic Schemas-----------
 class RubricItemConfig(BaseModel):
     """
     Defines and validates the setup rules for a single test question

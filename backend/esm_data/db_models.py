@@ -2,7 +2,9 @@
 Tables that we want to save to db 
 """
 
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import Field, Relationship, SQLModel
+
+__all__ = ["FormTemplate", "TemplateQuestion", "Task"]
 
 class FormTemplate(SQLModel, table=True):
     """

@@ -4,24 +4,25 @@ Reads from template.json at startupt
 Uses AI to answer questions
 """
 
-import logging
 from importlib.resources import files
+import logging
 from pathlib import Path
 from typing import TypedDict
+
 import yaml
 
-from backend.esm_data.providers import LLMProvider
-from backend.esm_data.models import(
-    FormResponses,
-    AgentExecutionError,
+from backend.esm_data.document import EXTRACTOR_MAP, extract_text
+from backend.esm_data.models import (
     AgentConfigurationError,
-    DocumentExtractionError,
+    AgentExecutionError,
     CorruptedDocumentError,
-    ExtractionReport   
+    DocumentExtractionError,
+    ExtractionReport,
+    FormResponses,
 )
+from backend.esm_data.providers import LLMProvider
 
-from backend.esm_data.document import extract_text, EXTRACTOR_MAP
-
+__all__ = ["TemplateConfig", "DocumentGenerator"]
 logger = logging.getLogger(__name__)
 
 class TemplateConfig(TypedDict):

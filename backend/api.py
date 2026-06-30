@@ -3,48 +3,49 @@ FastAPI backend
 uvicorn api:app --reload --port 8000
 """
 
-import logging
-from backend.seed import seed_data_from_yaml
-import asyncio 
-from pathlib import Path
+import asyncio
+from concurrent.futures import ProcessPoolExecutor
+from contextlib import asynccontextmanager
 from importlib.resources import files
+import json
+import logging
+from pathlib import Path
+import shutil
 from typing import Never
+import uuid
+
 from fastapi import (
-    FastAPI, 
-    UploadFile,
+    BackgroundTasks,
+    Depends,
+    FastAPI,
     File,
     Form,
     HTTPException,
     Query,
-    BackgroundTasks,
+    UploadFile,
     status,
-    Depends
 )
-
-from contextlib import asynccontextmanager
-import shutil
-import uuid
 from fastapi.responses import JSONResponse
-import json
-from concurrent.futures import ProcessPoolExecutor
-
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from backend.esm_data.database import async_session_creator, init_db_tables, get_db_session
-from backend.esm_data.db_models import FormTemplate, TemplateQuestion, Task
 
-from backend.esm_data.providers import get_provider
+from backend.esm_data.database import async_session_creator, get_db_session, init_db_tables
+from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
+from backend.esm_data.document import EXTRACTOR_MAP, extract_text
 from backend.esm_data.generator import DocumentGenerator
-from backend.esm_data.judge import LLMJudge, AuditStressTestReport
-from backend.esm_data.document import extract_text, EXTRACTOR_MAP
+from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import AuditRequest, TaskStatusResponse, TemplateCreateRequest
+from backend.esm_data.providers import get_provider
+from backend.seed import seed_data_from_yaml
+
+
+__all__ = ["app"]
 
 PROJECT_ROOT = Path(str(files("backend"))).parent
 RUN_DIR = PROJECT_ROOT / "data" / "runtime_staging"
 
 logger = logging.getLogger(__name__)
 cpu_process_pool: ProcessPoolExecutor = ProcessPoolExecutor(max_workers=2)
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

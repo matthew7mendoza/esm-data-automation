@@ -2,11 +2,15 @@
 Convert files into structured string formats
 """
 
+from collections.abc import Callable
 import logging
 from pathlib import Path
-from collections.abc import Callable
+
 from markitdown import MarkItDown
-from backend.esm_data.models import DocumentExtractionError, CorruptedDocumentError
+
+from backend.esm_data.models import CorruptedDocumentError, DocumentExtractionError
+
+__all__ = ["EXTRACTOR_MAP", "extract_text"]
 
 logger = logging.getLogger(__name__)
 _converter: MarkItDown = MarkItDown()
