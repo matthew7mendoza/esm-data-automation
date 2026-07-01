@@ -2,8 +2,6 @@
 FastAPI backend
 uvicorn api:app --reload --port 8000
 """
-
-
 import asyncio
 import json
 import logging
@@ -139,10 +137,14 @@ async def run_heavy_processing(
         )
         result = await session.exec(statement)
         target_questions = [question.text for question in result.all()]
+
+    error_detail: str | None = None
+    report: dict | None = None
+    final_unified_context: str = ""
     
     try:
         if not target_questions:
-            raise ValueError(f"No operational fields found for data blueprint: '{target_doc}'")
+            raise ValueError(f"No fields found for data blueprint: '{target_doc}'")
         
         loop = asyncio.get_running_loop()
         final_unified_context = await loop.run_in_executor(
@@ -154,33 +156,46 @@ async def run_heavy_processing(
         provider_instance = get_provider(name=model_provider)
         generator = DocumentGenerator(provider=provider_instance)
 
-        report = await asyncio.to_thread(
-            generator.execute_extraction,
-            target_questions,
-            final_unified_context
-        )
-
-        async with async_session_creator() as session:
-            if not (task := await session.get(Task, task_id)):
-                return
-            task.status = "COMPLETED"
-            task.report_json = json.dumps(report)
-            task.source_context = final_unified_context
-            await session.commit()
-            
-    except Exception as error:  
         try:
-            async with async_session_creator() as session:
-                if task := await session.get(Task, task_id):
-                    task.status = "FAILED"
-                    task.detail = str(error)
-                    await session.commit()
-        except SQLAlchemyError as db_error:
-            logger.error(f"DB failed to update task failure status: {db_error}")
-    
+            report = await asyncio.to_thread(
+                generator.execute_extraction,
+                target_questions,
+                final_unified_context
+            )
+        except Exception as generation_error:
+            raise AgentExecutionError(f"LLM generation failed: {generation_error}") from generation_error
+        
+    except (ValueError, OSError, AgentConfigurationError, AgentExecutionError) as known_fault:
+        error_detail = str(known_fault)
+        logger.error(f"Processing failed to application domain fault: {error_detail}", exc_info=True)
+
+    except Exception as unexpected_fault:
+        error_detail = f"Unexpected failure: {unexpected_fault}"
+        logger.error(f"Processing crashed due to unhandled system runtime exception: {error_detail}", exc_info=True)
+
     finally:
         if staging_path.exists():
             await asyncio.to_thread(shutil.rmtree, staging_path)
+    
+    try:
+        async with async_session_creator() as session:
+            if not (task := await session.get(Task, task_id)):
+                logger.error(f"Failed to finalize processing job: tracking ticket {task_id} missing")
+                return
+            
+            if error_detail:
+                task.status = "FAILED"
+                task.detail = error_detail
+            else:
+                task.status = "COMPLETED"
+                task.report_json = json.dumps(report)
+                task.source_context = final_unified_context
+
+            await session.commit()
+    
+    except SQLAlchemyError as db_error:
+        logger.error(f"Database tracking layer failed to write terminal completion status: {db_error}", exc_info=True)
+   
 
 @app.get("/api/templates")
 async def get_templates(session: AsyncSession = Depends(get_db_session)) -> list[str]:
@@ -254,7 +269,7 @@ async def generate_document(
         )
     
 @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
-async def get_task_status(task_id: str, session: AsyncSession = Depends(get_db_session)) -> TaskStatusResponse:
+async def get_task_status(task_id: TaskId, session: AsyncSession = Depends(get_db_session)) -> TaskStatusResponse:
     """
     Look up a specific tracking code inside db, 
     checks if AI is still writing, finished, or crashed

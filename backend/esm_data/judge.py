@@ -2,12 +2,12 @@ import asyncio
 from collections import Counter
 from dataclasses import InitVar, dataclass, field
 from datetime import datetime
-import json
-import itertools
-import logging
 from importlib.resources import files
+import itertools
+import json
+import logging
 from pathlib import Path
-from typing import Literal, Never, TypedDict, Final
+from typing import Final, Literal, Never, TypedDict
 
 import openai
 import yaml

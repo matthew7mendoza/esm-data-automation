@@ -11,7 +11,7 @@ from typing import Protocol, TypedDict, Final
 import requests
 import streamlit as st
 
-from backend.esm_data.models import ExtractionReport
+from backend.esm_data.models import ExtractionReport, TaskId
 
 __all__ = ["main"]
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 BACKEND_URL: Final[str] = "http://localhost:8000"
 
-MODEL_CONFIGURATIONS = Final[dict[str, str]] = {
+MODEL_CONFIGURATIONS: Final[dict[str, str]] = {
     "Gemini": "gemini",
     "Nvidia": "nemotron"
 }
@@ -54,7 +54,7 @@ def fetch_server_templates() -> list[str]:
 
     return response.json()
 
-def _get_task_profile(task_id: str) -> TaskProfileDict | None:
+def _get_task_profile(task_id: TaskId) -> TaskProfileDict | None:
     """
     helper function Gets backend training tickets
     """
@@ -142,7 +142,7 @@ def send_generation_request(
 def send_audit_request(
     *,
     chosen_engine: str,
-    answers: dict,
+    answers: dict[str, str],
     judge_iterations: int
 ) -> None:
     """
