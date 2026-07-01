@@ -333,7 +333,7 @@ async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> lis
 async def run_audit(
     payload: AuditRequest,
     model_provider: str = Query("gemini")
-) -> AuditStressTestReport | dict[str, Never]:
+) -> AuditStressTestReport:
     """
     Run stability test w/o blocking primary application
     """

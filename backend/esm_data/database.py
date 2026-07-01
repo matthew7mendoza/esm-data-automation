@@ -15,7 +15,7 @@ __all__ = ["async_engine", "async_session_creator", "init_db_tables", "get_db_se
 
 PROJECT_ROOT = Path(str(files("backend"))).parent
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "esm_form_automation.db"
-DATABASE_URL: Final[str] = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite///{DEFAULT_DB_PATH}")
+DATABASE_URL: Final[str] = os.environ.get("DATABASE_URL", f"sqlite+aiosqlite:///{DEFAULT_DB_PATH}")
 
 async_engine: AsyncEngine = create_async_engine(DATABASE_URL, echo=False, future=True)
 async_session_creator: async_sessionmaker[AsyncSession] = async_sessionmaker(

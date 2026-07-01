@@ -238,7 +238,7 @@ def on_history_change() -> None:
     
     full_job_payload = response.json()
     st.session_state.generator_report = full_job_payload.get("report")
-    st.session_sate.source_context = full_job_payload.get("source_context")
+    st.session_state.source_context = full_job_payload.get("source_context")
 
 def render_historical_sidebar() -> None:
     """
@@ -279,7 +279,7 @@ def render_historical_sidebar() -> None:
         options=options_list,
         key="history_selectbox",
         on_change=on_history_change,
-        disabled=st.session_sate.job_running
+        disabled=st.session_state.job_running
     )
 
 
@@ -313,7 +313,11 @@ def main() -> None:
     if st.session_state.job_running and "pending_audit" in st.session_state:
         args = st.session_state.pop("pending_audit")
         current_answers = st.session_state.generator_report.get("extracted_answers", {})
-        send_audit_request(args["chosen_engine"], current_answers, args["judge_iterations"])
+        send_audit_request(
+            chosen_engine=args["chosen_engine"],
+            answers=current_answers,
+            judge_iterations=args["judge_iterations"]
+        )
         st.session_state.job_running = False
         st.rerun()
 
