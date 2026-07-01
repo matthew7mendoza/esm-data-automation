@@ -26,7 +26,7 @@ MODEL_CONFIGURATIONS: Final[dict[str, str]] = {
 }
 
 class TaskProfileDict(TypedDict):
-    task_id: str
+    task_id: TaskId
     status: str
     custom_name: str | None
     report: ExtractionReport | None
