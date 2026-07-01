@@ -5,6 +5,7 @@ from collections.abc import AsyncGenerator
 from importlib.resources import files
 import os
 from pathlib import Path
+from typing import Final
 
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 BACKEND_URL: Final[str] = "http://localhost:8000"
 
-MODEL_CONFIGURATIONS: Final[dict[str, str]] = {
+MODEL_CONFIGURATIONS: Final[dict[str, str]] = {  
     "Gemini": "gemini",
     "Nvidia": "nemotron"
 }
