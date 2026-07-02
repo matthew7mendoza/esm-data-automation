@@ -4,6 +4,7 @@ HTTP client operations
 
 import contextlib
 import logging
+from typing import Final
 
 import requests
 
@@ -13,7 +14,7 @@ from frontend.protocols import TaskProfileDict
 
 __all__ = ["fetch_server_templates", "get_task_profile"]
 
-logger = logging.getLogger(__name__)
+logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 def fetch_server_templates() -> list[str]:
     """
@@ -33,7 +34,7 @@ def fetch_server_templates() -> list[str]:
     
     return response.json()
 
-def get_task_profile(task_id: TaskId) -> TaskProfileDict | None:
+def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
     """
     Helper function tracking real-time backend updates
     """
@@ -45,3 +46,16 @@ def get_task_profile(task_id: TaskId) -> TaskProfileDict | None:
             return response.json()
         
     return None
+
+def fetch_all_historical_tasks() -> list[dict[str, object]]:
+    """
+    Gets every historical run from backend
+    """
+
+    with contextlib.suppress(requests.exceptions.RequestException):
+        response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=10)
+
+        if response.status_code == 200:
+            return response.json()
+
+    return []
