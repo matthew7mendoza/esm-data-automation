@@ -44,7 +44,8 @@ def render_answers_and_missing_sections() -> None:
     missing information side-by-side using two columns
     """
 
-    if not st.session_state.generator_report:
+    generator_report = st.session_state.get("generator_report")
+    if not isinstance(generator_report, dict):
         return
     
     st.markdown("---")
@@ -52,13 +53,16 @@ def render_answers_and_missing_sections() -> None:
 
     with left_column:
         st.subheader("Extracted Answers")
-        answers = st.session_state.generator_report.get("extracted_answers", {})
-        for question, answer in answers.items():
-            st.markdown(f"**{question}**\n> {answer}")
+        answers = generator_report.get("extracted_answers")
+        if isinstance(answers, dict):
+            for question, answer in answers.items():
+                st.markdown(f"**{question}**\n> {answer}")
     
     with right_column:
         st.subheader("Missing Information")
-        missing = st.session_state.generator_report.get("missing_information", [])
+        missing = generator_report.get("missing_information")
+        if not isinstance(missing, list):
+            return
 
         if not missing:
             st.success("The AI found answers to all questions for this template!!!")

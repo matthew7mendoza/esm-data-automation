@@ -61,32 +61,36 @@ def _process_pending_jobs() -> None:
         st.session_state.run_state = "idle"
 
         if "pending_generation" in st.session_state:
-            generation_args: dict[str, object] = st.session_state.pop("pending_generation")
-            send_generation_request(
-                target_document=cast(str, generation_args["target_document"]),
-                chosen_engine=cast(str, generation_args["chosen_engine"]),
-                uploaded_files=cast(list[UploadedFileProtocol], generation_args["uploaded_files"]),
-                custom_name=cast(str, generation_args.get("custom_name", ""))
-            )
+            generation_args = st.session_state.pop("pending_generation")
+            if isinstance(generation_args, dict):
+                send_generation_request(
+                    target_document=cast(str, generation_args.get("target_document", "")),
+                    chosen_engine=cast(str, generation_args.get("chosen_engine", "")),
+                    uploaded_files=cast(list[UploadedFileProtocol], generation_args.get("uploaded_files", [])),
+                    custom_name=cast(str, generation_args.get("custom_name", ""))
+                )
             st.session_state.job_running = False
             st.rerun()
             return
         
         if "pending_audit" in st.session_state:
-            audit_args: dict[str, object] = st.session_state.pop("pending_audit")
-            task_id: str = str(audit_args.pop("task_id", ""))
-            metrics = send_audit_request(
-                chosen_engine=cast(str, audit_args["chosen_engine"]),
-                answers=cast(dict[str, str], audit_args["answers"]),
-                judge_iterations=cast(int, audit_args["judge_iterations"]),
-                source_context=cast(str, audit_args["source_context"])
-            )
-            if metrics:
-                st.session_state.audit_metrics = metrics
+            audit_args = st.session_state.pop("pending_audit")
+            if isinstance(audit_args, dict):
+                task_id: str = str(audit_args.pop("task_id", ""))
+                metrics = send_audit_request(
+                    chosen_engine=cast(str, audit_args.get("chosen_engine", "")),
+                    answers=cast(dict[str, str], audit_args.get("answers", {})),
+                    judge_iterations=cast(int, audit_args.get("judge_iterations", 3)),
+                    source_context=cast(str, audit_args.get("source_context", ""))
+                )
+                if metrics:
+                    st.session_state.audit_metrics = metrics
 
-                if "historical_audits" not in st.session_state:
-                    st.session_state.historical_audits = {}
-                st.session_state.historical_audits[task_id] = metrics
+                    historical_audits = st.session_state.get("historical_audits")
+                    if not isinstance(historical_audits, dict):
+                        historical_audits = {}
+                    historical_audits[task_id] = metrics
+                    st.session_state.historical_audits = historical_audits
 
             st.session_state.job_running = False
             st.rerun()

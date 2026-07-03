@@ -25,10 +25,14 @@ def _on_history_change() -> None:
     if selected_job_name == "-- Select Past Run --":
         return
     
-    chosen_job: dict[str, object] = (
-        st.session_state.get("task_mapping", {})
-        .get(selected_job_name, {})
-    )
+    task_mapping = st.session_state.get("task_mapping")
+    if not isinstance(task_mapping, dict):
+        return
+    
+    chosen_job = task_mapping.get(selected_job_name)
+    if not isinstance(chosen_job, dict):
+        return
+    
     task_id: str | None = cast(str | None, chosen_job.get("task_id"))
     if not task_id: 
         return
@@ -55,10 +59,11 @@ def _on_history_change() -> None:
     st.session_state.generator_report = full_job_payload.get("report")
     st.session_state.source_context = full_job_payload.get("source_context")
 
-    historical_audits: dict[str, dict[str, object]] = st.session_state.get(
-        "historical_audits", {}
-    )
-    st.session_state.audit_metrics = historical_audits.get(task_id)
+    historical_audits = st.session_state.get("historical_audits")
+    if isinstance(historical_audits, dict):
+        st.session_state.audit_metrics = historical_audits.get(task_id)
+    else:
+        st.session_state.audit_metrics = None
 
 def render_historical_sidebar() -> None:
     """
