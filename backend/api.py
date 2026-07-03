@@ -207,7 +207,7 @@ async def get_templates(
 
     result = await session.exec(select(FormTemplate))
     return [
-        template.name for template in result.scalars().all()
+        template.name for template in result.all()
     ]
         
 @app.post("/api/generate", status_code=status.HTTP_202_ACCEPTED)
@@ -342,7 +342,7 @@ async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> lis
             detail=task.detail,
             source_context=task.source_context
         )
-        for task in result.scalars().all()
+        for task in result.all()
     ]
 
 @app.post("/api/audit")

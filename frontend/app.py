@@ -8,7 +8,10 @@ from typing import Final
 import streamlit as st
 
 from frontend.api import fetch_server_templates, fetch_all_historical_tasks
-from frontend.components.results import render_answers_and_missing_sections
+from frontend.components.results import (
+    render_answers_and_missing_sections,
+    render_trust_audit_ledger
+)
 from frontend.config import MODEL_CONFIGURATIONS
 from frontend.services import send_audit_request, send_generation_request
 
@@ -53,6 +56,37 @@ def _process_pending_jobs() -> None:
         st.session_state.job_running = False
         st.rerun()
         return
+    
+def _purge_workspace_heap() -> None:
+    """
+    Removes active tracking keys to reset the UI 
+    to baseline so things don't get messy
+    """
+
+    transient_keys: list[str] = [
+        "generator_report",
+        "source_context",
+        "audit_metrics",
+    ]
+    for key in transient_keys:
+        st.session_state.pop(key, None)
+
+def _render_workspace_cleaner() -> None:
+    """
+    Render workspace cleaner control w/ gaurd rules
+    so basically the logic to decide when to make reset the UI 
+    to an original state
+    """
+
+    has_active_view: bool = bool(
+        st.session_state.get("generator_report") or st.session_state.get("audit_metrics")
+    )
+    if not has_active_view:
+        return
+    
+    if st.button("Streamlit Workspace Reset Button", type="secondary"):
+        _purge_workspace_heap()
+        st.rerun()
     
 
 def _render_step_one_upload(
@@ -188,7 +222,6 @@ def _render_generator_tab(
     )
     
     report: dict | None = st.session_state.get("generator_report")
-
     if not report:
         return
     
@@ -262,7 +295,6 @@ def _render_judge_tab(
             ),
             None
         )
-
         if not selected_task:
             return
         
@@ -303,6 +335,7 @@ def main() -> None:
 
     _initialize_session_state()
     _process_pending_jobs()
+    _render_workspace_cleaner()
 
     is_running: bool = bool(st.session_state.get("job_running"))
     available_templates: list[str] = fetch_server_templates()
@@ -325,4 +358,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
