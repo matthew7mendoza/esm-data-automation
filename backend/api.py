@@ -195,16 +195,20 @@ async def run_heavy_processing(
     
     except SQLAlchemyError as db_error:
         logger.error(f"Database tracking layer failed to write terminal completion status: {db_error}", exc_info=True)
-   
 
 @app.get("/api/templates")
-async def get_templates(session: AsyncSession = Depends(get_db_session)) -> list[str]:
+async def get_templates(
+    *,
+    session: AsyncSession = Depends(get_db_session)
+) -> list[str]:
     """
-    Gets available template keys from database registry
+    Gets availabble template keys from database
     """
 
     result = await session.exec(select(FormTemplate))
-    return [template.name for template in result.all()]
+    return [
+        template.name for template in result.scalars().all()
+    ]
         
 @app.post("/api/generate", status_code=status.HTTP_202_ACCEPTED)
 async def generate_document(
@@ -321,14 +325,25 @@ async def create_custom_template(
     }
 
 @app.get("/api/tasks", response_model=list[TaskStatusResponse])
-async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> list[Task]:
+async def list_all_tasks(session: AsyncSession = Depends(get_db_session)) -> list[TaskStatusResponse]:
     """
     Gets every tracking ticket stored in db,
-    allows scientists to look at their history of generated template records
+    allows scientists to look at their history of generated documents
     """
 
     result = await session.exec(select(Task).order_by(Task.task_id))
-    return result.all()
+
+    return [
+        TaskStatusResponse(
+            task_id=task.task_id,
+            status=task.status,
+            custom_name=task.custom_name,
+            report=json.loads(task.report_json) if task.report_json else None,
+            detail=task.detail,
+            source_context=task.source_context
+        )
+        for task in result.scalars().all()
+    ]
 
 @app.post("/api/audit")
 async def run_audit(
