@@ -152,8 +152,6 @@ class ExtractionReport(TypedDict):
     Explicit typedict for AI generator output
     """
 
-    model_config = ConfigDict(frozen=True)
-
     extracted_answers: dict[str, str]
     missing_information: list[str]
 

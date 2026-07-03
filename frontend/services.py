@@ -3,6 +3,7 @@ Streamlit orchestation
 """
 
 import time
+from typing import Any, cast
 
 import requests
 import streamlit as st
@@ -96,7 +97,7 @@ def send_audit_request(
     answers: dict[str, str],
     judge_iterations: int,
     source_context: str
-) -> None:
+) -> dict[str, Any] | None:
     """
     Sends the generated answers to an AI judge to evaluate how consistent they are
     """
@@ -114,19 +115,19 @@ def send_audit_request(
     try:
         audit_response = requests.post(
             f"{BACKEND_URL}/api/audit",
-            json=audit_payload,
+            json=cast(Any, audit_payload),
             params=parameters,
             timeout=120
         )
     except requests.exceptions.RequestException as network_error:
         st.error(f"Communication loss with audit server: {network_error}")
-        return
+        return None
     
     if audit_response.status_code != 200:
         st.error(f"Audit server error: {audit_response.json().get('detail')}")
-        return
+        return None
     
-    metrics = audit_response.json()
+    metrics = cast(dict[str, Any], audit_response.json())
     st.session_state.audit_metrics = metrics
 
     st.success("Audit complete!")
@@ -136,3 +137,4 @@ def send_audit_request(
 
     st.metric("Agreement score (Gwet's AC1)", kappa_score)
     st.dataframe(metrics.get("item_level_stability_metrics", []), width="stretch")
+    return metrics

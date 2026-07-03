@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import Final, Never 
+from typing import Final, Never, cast
 
 from fastapi import (
     BackgroundTasks,
@@ -27,7 +27,7 @@ from fastapi import (
 )
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import select
+from sqlmodel import select, col
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.esm_data.database import async_session_creator, get_db_session, init_db_tables
@@ -42,7 +42,8 @@ from backend.esm_data.models import (
     AuditRequest,
     TaskStatusResponse,
     TemplateCreateRequest,
-    TaskId
+    TaskId,
+    ExtractionReport
 )
 from backend.esm_data.providers import get_provider
 from backend.seed import seed_data_from_yaml
@@ -133,13 +134,13 @@ async def run_heavy_processing(
             select(TemplateQuestion)
             .join(FormTemplate)
             .where(FormTemplate.name == target_doc.upper())
-            .order_by(TemplateQuestion.sort_order)
+            .order_by(col(TemplateQuestion.sort_order))
         )
         result = await session.exec(statement)
         target_questions = [question.text for question in result.all()]
 
     error_detail: str | None = None
-    report: dict | None = None
+    report: ExtractionReport | None = None
     final_unified_context: str = ""
     
     try:
@@ -224,7 +225,7 @@ async def generate_document(
     return tracking JSON reciept
     """
 
-    task_id = str(uuid.uuid4())
+    task_id = TaskId(str(uuid.uuid4()))
     task_staging_path = RUN_DIR / task_id
     task_staging_path.mkdir(parents=True, exist_ok=True)
 
@@ -246,31 +247,31 @@ async def generate_document(
                 detail="Storage IO error while staging files..."
             ) from io_error
         
-        try:
-            new_task = Task(task_id=task_id, status="PENDING", custom_name=payload.custom_name)
-            session.add(new_task)
-            await session.commit()
-        except SQLAlchemyError as db_error:
-            if task_staging_path.exists():
-                shutil.rmtree(task_staging_path)
-            logger.error("Database tracking error while performing task", exc_info=True)
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Internal database fail occured while processing task record"
-            ) from db_error
-        
-        background_tasks.add_task(
-            run_heavy_processing,
-            task_id=task_id,
-            target_doc=payload.target_doc.upper(),
-            model_provider=payload.model_provider,
-            staging_path=task_staging_path
-        )
+    try:
+        new_task = Task(task_id=task_id, status="PENDING", custom_name=payload.custom_name)
+        session.add(new_task)
+        await session.commit()
+    except SQLAlchemyError as db_error:
+        if task_staging_path.exists():
+            shutil.rmtree(task_staging_path)
+        logger.error("Database tracking error while performing task", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal database fail occured while processing task record"
+        ) from db_error
+    
+    background_tasks.add_task(
+        run_heavy_processing,
+        task_id=task_id,
+        target_doc=payload.target_doc.upper(),
+        model_provider=payload.model_provider,
+        staging_path=task_staging_path
+    )
 
-        return JSONResponse(
-            status_code=status.HTTP_202_ACCEPTED,
-            content={"task_id": task_id, "status": "PENDING"}
-        )
+    return JSONResponse(
+        status_code=status.HTTP_202_ACCEPTED,
+        content={"task_id": task_id, "status": "PENDING"}
+    )
     
 @app.get("/api/tasks/{task_id}", response_model=TaskStatusResponse)
 async def get_task_status(task_id: TaskId, session: AsyncSession = Depends(get_db_session)) -> TaskStatusResponse:
@@ -375,7 +376,12 @@ async def run_audit(
             prefix_label="API_EVAL",
             i_iterations=payload.iterations
         )
-        return metrics
+        if not metrics:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Stability Audit Failure: empty report generated."
+            )
+        return cast(AuditStressTestReport, metrics)
     
     except Exception as runtime_execution_error:
         logger.error("Exception intercepted during execution of stability stress test loops", exc_info=True)

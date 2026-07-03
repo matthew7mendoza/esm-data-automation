@@ -3,7 +3,7 @@ Primary streamlit rendering
 """
 
 import logging
-from typing import Final
+from typing import Final, cast
 
 import streamlit as st
 
@@ -12,7 +12,9 @@ from frontend.components.results import (
     render_answers_and_missing_sections,
     render_trust_audit_ledger
 )
+from frontend.components.sidebar import render_historical_sidebar
 from frontend.config import MODEL_CONFIGURATIONS
+from frontend.protocols import UploadedFileProtocol
 from frontend.services import send_audit_request, send_generation_request
 
 __all__ = ["main"]
@@ -24,11 +26,13 @@ def _initialize_session_state() -> None:
     Set up core streamlit session with explicit mutation
     """
 
-    defaults: dict[str, bool | dict | None] = {
+    defaults: dict[str, bool | dict | str | None] = {
         "generator_report": None,
         "source_context": None,
         "audit_metrics": None,
         "job_running": False,
+        "current_task_id": None,
+        "historical_audits": {}
     }
 
     for key, value in defaults.items():
@@ -45,17 +49,36 @@ def _process_pending_jobs() -> None:
     
     if "pending_generation" in st.session_state:
         generation_args: dict[str, object] = st.session_state.pop("pending_generation")
-        send_generation_request(**generation_args)
+        send_generation_request(
+            target_document=cast(str, generation_args["target_document"]),
+            chosen_engine=cast(str, generation_args["chosen_engine"]),
+            uploaded_files=cast(list[UploadedFileProtocol], generation_args["uploaded_files"]),
+            custom_name=cast(str, generation_args.get("custom_name", ""))
+        )
         st.session_state.job_running = False
         st.rerun()
         return
     
     if "pending_audit" in st.session_state:
         audit_args: dict[str, object] = st.session_state.pop("pending_audit")
-        send_audit_request(**audit_args)
+        task_id: str = str(audit_args.pop("task_id", ""))
+        metrics = send_audit_request(
+            chosen_engine=cast(str, audit_args["chosen_engine"]),
+            answers=cast(dict[str, str], audit_args["answers"]),
+            judge_iterations=cast(int, audit_args["judge_iterations"]),
+            source_context=cast(str, audit_args["source_context"])
+        )
+        if metrics:
+            st.session_state.audit_metrics = metrics
+
+            if "historical_audits" not in st.session_state:
+                st.session_state.historical_audits = {}
+            st.session_state.historical_audits[task_id] = metrics
+
         st.session_state.job_running = False
         st.rerun()
         return
+    
     
 def _purge_workspace_heap() -> None:
     """
@@ -67,6 +90,7 @@ def _purge_workspace_heap() -> None:
         "generator_report",
         "source_context",
         "audit_metrics",
+        "current_task_id"
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
@@ -79,7 +103,8 @@ def _render_workspace_cleaner() -> None:
     """
 
     has_active_view: bool = bool(
-        st.session_state.get("generator_report") or st.session_state.get("audit_metrics")
+        st.session_state.get("generator_report") 
+        or st.session_state.get("audit_metrics")
     )
     if not has_active_view:
         return
@@ -138,7 +163,7 @@ def _render_step_one_upload(
         st.rerun()
     return target_document
 
-def _render_step_two_manual_entry(*, missing_questions: list[str]) -> None:
+def _render_step_two_manual_entry(*, missing_questions: list[str], disabled: bool) -> None:
     """
     Dynamically renders forms for users to fill AI-missed fields.
     """
@@ -153,9 +178,9 @@ def _render_step_two_manual_entry(*, missing_questions: list[str]) -> None:
 
     with st.form("manual_entry_form"):
         for question in missing_questions:
-            st.text_area(label=question, key=f"manual_{question}")
+            st.text_area(label=question, key=f"manual_{question}", disabled=disabled)
 
-        if st.form_submit_button("Save Optional Responses"):
+        if st.form_submit_button("Save Optional Responses", disabled=disabled):
             st.success("Responses saved! You can generate your document below.")
 
 def _build_final_document_string(
@@ -186,7 +211,8 @@ def _render_step_three_download(
     *,
     target_document: str,
     extracted: dict[str, str],
-    missing: list[str]
+    missing: list[str],
+    disabled: bool
 ) -> None:
     """
     Provides the final aggregated document for download
@@ -201,7 +227,8 @@ def _render_step_three_download(
         data=final_markdown,
         file_name=f"{target_document}_completed.md",
         mime="text/markdown",
-        type="primary"
+        type="primary",
+        disabled=disabled
     )
 
 def _render_generator_tab(
@@ -231,19 +258,35 @@ def _render_generator_tab(
     missing_question: list[str] = report.get("missing_information", [])
     extracted_answers: dict[str, str] = report.get("extracted_answers", {})
 
-    _render_step_two_manual_entry(missing_questions=missing_question)
+    _render_step_two_manual_entry(missing_questions=missing_question, disabled=is_running)
     st.markdown("---")
 
     _render_step_three_download(
         target_document=target_document,
         extracted=extracted_answers,
-        missing=missing_question
+        missing=missing_question,
+        disabled=is_running
+    )
+
+    audit_metrics: dict | None = st.session_state.get("audit_metrics")
+    if not audit_metrics:
+        return
+    
+    st.markdown("---")
+    st.subheader("Complete run snapshot")
+    metadata: dict = audit_metrics.get("metadata", {})
+    kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
+        "global_gwets_ac1", 0.0
+    )
+
+    st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
+    st.dataframe(
+        audit_metrics.get("item_level_stability_metrics", []),
+        use_container_width=True
     )
 
 def _render_judge_tab(
-    *,
-    disabled: bool,
-    models: list[str]
+    *, disabled: bool, models: list[str]
 ) -> None:
     """
     Renders the LLM Judge tab
@@ -287,43 +330,54 @@ def _render_judge_tab(
         disabled=disabled
     )
 
+    selected_task: dict[str, object] | None = next(
+        (task for task in completed_tasks if str(task["task_id"]) == chosen_task_id),
+        None
+    )
+
+    if selected_task:
+        st.markdown("#### Original Source Documents Under Review")
+        render_trust_audit_ledger(source_context=cast(str | None, selected_task.get("source_context")))
+
     if st.button("Run Stability Test", type="primary", disabled=disabled):
-        selected_task: dict[str, object] | None = next(
-            (
-                task for task in completed_tasks
-                if str(task["task_id"]) == chosen_task_id
-            ),
-            None
-        )
         if not selected_task:
             return
         
         report_data = selected_task.get("report") or {}
-        extracted = report_data.get("extracted_answers", {}) if isinstance(report_data, dict) else {}
+        extracted = (
+            report_data.get("extracted_answers", {})
+            if isinstance(report_data, dict)
+            else {}
+        )
 
         st.session_state.job_running = True
         st.session_state.pending_audit = {
+            "task_id": chosen_task_id,
             "chosen_engine": chosen_engine,
             "judge_iterations": judge_iterations,
             "answers": extracted,
-            "source_context": selected_task.get("source_context", "")
+            "source_context": selected_task.get("source_context", ""),
         }
         st.rerun()
-
+    
     audit_metrics: dict | None = st.session_state.get("audit_metrics")
     if audit_metrics:
-        st.markdown("---")
-        st.success("Audit complete!")
+        current_task_id: str | None = st.session_state.get("current_task_id")
+        if current_task_id == chosen_task_id:
+            st.markdown("---")
+            st.success("Audit complete!")
 
-        metadata: dict = audit_metrics.get("metadata", {})
-        # Safety fallback handles key variance across layers
-        kappa_score = metadata.get("global_gwet_ac1") or metadata.get("global_gwets_ac1", 0.0)
+            metadata: dict = audit_metrics.get("metadata", {})
+            kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
+                "global_gwets_ac1", 0.0
+            )
 
-        st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
-        st.dataframe(
-            audit_metrics.get("item_level_stability_metrics", []),
-            use_container_width=True,
-        )
+            st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
+            st.dataframe(
+                audit_metrics.get("item_level_stability_metrics", []),
+                use_container_width=True,
+            )
+
     
 def main() -> None:
     """
@@ -338,10 +392,20 @@ def main() -> None:
     _render_workspace_cleaner()
 
     is_running: bool = bool(st.session_state.get("job_running"))
+
+    if is_running:
+        st.warning(
+            "Active AI job currently running..."
+        )
+    
+    render_historical_sidebar()
+
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
 
-    tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
+    tab_generator, tab_judge = st.tabs(
+        ["Document Generator", "LLM Judge Evaluation"]
+    )
 
     with tab_generator:
         _render_generator_tab(
@@ -355,6 +419,7 @@ def main() -> None:
             disabled=is_running,
             models=available_models,
         )
+    
 
 if __name__ == "__main__":
     main()

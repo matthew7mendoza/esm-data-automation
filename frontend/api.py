@@ -4,7 +4,7 @@ HTTP client operations
 
 import contextlib
 import logging
-from typing import Final
+from typing import Final, cast
 
 import requests
 
@@ -32,7 +32,7 @@ def fetch_server_templates() -> list[str]:
         logger.warning(f"Backend returned unexpected status: {response.status_code}")
         return ["DMP", "README"]
     
-    return response.json()
+    return cast(list[str], response.json())
 
 def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
     """
@@ -43,7 +43,7 @@ def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
         response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
         
         if response.status_code == 200:
-            return response.json()
+            return cast(TaskProfileDict, response.json())
         
     return None
 
@@ -56,6 +56,6 @@ def fetch_all_historical_tasks() -> list[dict[str, object]]:
         response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=10)
 
         if response.status_code == 200:
-            return response.json()
+            return cast(list[dict[str, object]], response.json())
 
     return []

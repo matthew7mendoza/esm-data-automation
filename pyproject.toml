@@ -28,3 +28,15 @@ dependencies = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["backend*", "frontend*"]
+
+[project.optional-dependencies]
+dev = [
+    "mypy"
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]

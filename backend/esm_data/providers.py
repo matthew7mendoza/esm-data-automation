@@ -8,7 +8,7 @@ between providers.
 import os
 from collections.abc import Callable
 from functools import partial
-from typing import Final, Protocol, TypedDict, Unpack, runtime_checkable
+from typing import Final, Protocol, TypedDict, Unpack, runtime_checkable, cast
 
 from google import genai
 from google.genai import types
@@ -85,7 +85,10 @@ class GeminiProvider:
                 temperature=0.0,
             ),
         )
-        return response.parsed
+        parsed = response.parsed
+        if parsed is None:
+            raise ValueError("Failed to parse structured response from Gemini.")
+        return cast(T, parsed)
 
     async def generate_structured_async[T: BaseModel](
         self, prompt: str, system_instruction: str, response_schema: type[T]
@@ -104,7 +107,10 @@ class GeminiProvider:
                 temperature=0.0,
             ),
         )
-        return response.parsed
+        parsed = response.parsed
+        if parsed is None:
+            raise ValueError("Failed to parse structured response from Gemini.")
+        return cast(T, parsed)
 
 
 class OpenAIProvider:
@@ -152,7 +158,10 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        return response.choices[0].message.parsed
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("Failed to parse structured response from OpenAI.")
+        return parsed
 
     async def generate_structured_async[T: BaseModel](
         self, prompt: str, system_instruction: str, response_schema: type[T]
@@ -170,7 +179,10 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        return response.choices[0].message.parsed
+        parsed = response.choices[0].message.parsed
+        if parsed is None:
+            raise ValueError("Failed to parse structured response from OpenAI.")
+        return parsed
 
 
 class ProviderArgs(TypedDict, total=False):

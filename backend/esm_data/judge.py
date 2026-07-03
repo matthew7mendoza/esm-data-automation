@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 from collections import Counter
 from dataclasses import InitVar, dataclass, field
@@ -7,7 +9,7 @@ import itertools
 import json
 import logging
 from pathlib import Path
-from typing import Final, Literal, Never, TypedDict
+from typing import Final, Literal, Never, TypedDict, cast
 
 import openai
 import yaml
@@ -65,7 +67,7 @@ class ItemAuditStream:
         """logging string"""
         return f"AuditStream[{self.item_id}] (Strategy: {self.strategy}) -> Questions: '{self.question[:40]}...'"
 
-    def compute_reliability(self) -> dict[str, str | float | Counter[str]]:
+    def compute_reliability(self) -> QuestionRealiabilityMetrics:
         """
         Calculate if the AI is reliable for any specific question by looking 
         at the distribution of the test runs
@@ -84,6 +86,7 @@ class ItemAuditStream:
 class QuestionRealiabilityMetrics(TypedDict):
     question: str
     inferred_strategy: str
+    percentage_agreement_pa: float
     gwets_ac1_gamma: float
     reasoning_stability_r_stab: float
     raw_dict_distribution: Counter[str]
@@ -141,7 +144,7 @@ class LLMJudge:
         try:
             with open(config_path, "r", encoding="utf-8") as file:
                 data = yaml.safe_load(file)
-                return data["JUDGE_INSTRUCTIONS"]
+                return cast(str, data["JUDGE_INSTRUCTIONS"])
         except KeyError as key_error:
             raise AgentConfigurationError("The requred key 'JUDGE_INSTRUCTIONS' was missing inside of templates.yaml") from key_error
         except (OSError, yaml.YAMLError) as serialization_error:
@@ -156,7 +159,7 @@ class LLMJudge:
         question_lower = question_text.lower()
         for strategy, keywords in self.STRATEGY_KEYWORDS.items():
             if any(word in question_lower for word in keywords):
-                return strategy
+                return cast(Literal["Numeric", "Quote", "Assertion"], strategy)
         return "Assertion"
     
     async def _evaluate_single_node(
@@ -229,7 +232,7 @@ class LLMJudge:
         
         audit_registry: dict[str, ItemAuditStream] = {
             item.id: ItemAuditStream(
-                item_id=item.id,
+                item_id=ItemId(item.id),
                 question=item.question,
                 strategy=item.strategy,
                 iterations=i_iterations
