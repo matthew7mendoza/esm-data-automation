@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spear-esm-data-automation"
+version = "0.1.0"
+description = "Automated ESM data documentation lifecycle using LLMs"
+readme = "README.md"
+requires-python = ">=3.12"
+
+dependencies = [
+    "pydantic",
+    "pyyaml",
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "streamlit>=1.35.0",
+    "google-genai",
+    "openai",
+    "markitdown[all]",
+    "sqlmodel",
+    "aiosqlite",
+    "asyncpg",
+    "python-dotenv"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*", "frontend*"]
+
+[project.optional-dependencies]
+dev = [
+    "mypy"
+]
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+plugins = ["pydantic.mypy"]

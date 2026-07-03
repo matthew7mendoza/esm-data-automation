@@ -4,7 +4,7 @@ Automating the data lifecycle for NOAA GFDL's SPEAR Earth System Model using LLM
 
 ### How to use: 
 
-1. Download all dependacies in environment.yml, python version 3.11
+1. Download all dependacies in environment.yml, python version 3.12
 
 
 2. Add your api key to the .env.example, then rename to .env
