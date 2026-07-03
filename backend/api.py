@@ -383,6 +383,8 @@ async def run_audit(
             )
         return cast(AuditStressTestReport, metrics)
     
+    except HTTPException:
+        raise
     except Exception as runtime_execution_error:
         logger.error("Exception intercepted during execution of stability stress test loops", exc_info=True)
 

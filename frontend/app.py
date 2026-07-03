@@ -32,7 +32,8 @@ def _initialize_session_state() -> None:
         "audit_metrics": None,
         "job_running": False,
         "current_task_id": None,
-        "historical_audits": {}
+        "historical_audits": {},
+        "run_state": "idle"
     }
 
     for key, value in defaults.items():
@@ -47,37 +48,49 @@ def _process_pending_jobs() -> None:
     if not st.session_state.get("job_running"):
         return
     
-    if "pending_generation" in st.session_state:
-        generation_args: dict[str, object] = st.session_state.pop("pending_generation")
-        send_generation_request(
-            target_document=cast(str, generation_args["target_document"]),
-            chosen_engine=cast(str, generation_args["chosen_engine"]),
-            uploaded_files=cast(list[UploadedFileProtocol], generation_args["uploaded_files"]),
-            custom_name=cast(str, generation_args.get("custom_name", ""))
-        )
-        st.session_state.job_running = False
-        st.rerun()
+    run_state = st.session_state.get("run_state", "idle")
+    if run_state == "triggered":
+        # Transition from triggered to executing. Do not execute the blocking request yet.
+        # This allows Streamlit to finish rendering the current page, which will disable all buttons in the browser.
+        st.session_state.run_state = "executing"
         return
-    
-    if "pending_audit" in st.session_state:
-        audit_args: dict[str, object] = st.session_state.pop("pending_audit")
-        task_id: str = str(audit_args.pop("task_id", ""))
-        metrics = send_audit_request(
-            chosen_engine=cast(str, audit_args["chosen_engine"]),
-            answers=cast(dict[str, str], audit_args["answers"]),
-            judge_iterations=cast(int, audit_args["judge_iterations"]),
-            source_context=cast(str, audit_args["source_context"])
-        )
-        if metrics:
-            st.session_state.audit_metrics = metrics
 
-            if "historical_audits" not in st.session_state:
-                st.session_state.historical_audits = {}
-            st.session_state.historical_audits[task_id] = metrics
+    if run_state == "executing":
+        # Transition from executing to idle, and now execute the actual blocking job.
+        # The browser is already showing the disabled UI, so the user cannot double-click.
+        st.session_state.run_state = "idle"
 
-        st.session_state.job_running = False
-        st.rerun()
-        return
+        if "pending_generation" in st.session_state:
+            generation_args: dict[str, object] = st.session_state.pop("pending_generation")
+            send_generation_request(
+                target_document=cast(str, generation_args["target_document"]),
+                chosen_engine=cast(str, generation_args["chosen_engine"]),
+                uploaded_files=cast(list[UploadedFileProtocol], generation_args["uploaded_files"]),
+                custom_name=cast(str, generation_args.get("custom_name", ""))
+            )
+            st.session_state.job_running = False
+            st.rerun()
+            return
+        
+        if "pending_audit" in st.session_state:
+            audit_args: dict[str, object] = st.session_state.pop("pending_audit")
+            task_id: str = str(audit_args.pop("task_id", ""))
+            metrics = send_audit_request(
+                chosen_engine=cast(str, audit_args["chosen_engine"]),
+                answers=cast(dict[str, str], audit_args["answers"]),
+                judge_iterations=cast(int, audit_args["judge_iterations"]),
+                source_context=cast(str, audit_args["source_context"])
+            )
+            if metrics:
+                st.session_state.audit_metrics = metrics
+
+                if "historical_audits" not in st.session_state:
+                    st.session_state.historical_audits = {}
+                st.session_state.historical_audits[task_id] = metrics
+
+            st.session_state.job_running = False
+            st.rerun()
+            return
     
     
 def _purge_workspace_heap() -> None:
@@ -154,6 +167,7 @@ def _render_step_one_upload(
 
     if st.button("Read Files & Write Answers", type="primary", disabled=not uploaded_files or disabled):
         st.session_state.job_running = True
+        st.session_state.run_state = "triggered"
         st.session_state.pending_generation = {
             "target_document": target_document,
             "chosen_engine": chosen_engine,
@@ -351,6 +365,7 @@ def _render_judge_tab(
         )
 
         st.session_state.job_running = True
+        st.session_state.run_state = "triggered"
         st.session_state.pending_audit = {
             "task_id": chosen_task_id,
             "chosen_engine": chosen_engine,
@@ -419,6 +434,9 @@ def main() -> None:
             disabled=is_running,
             models=available_models,
         )
+
+    if st.session_state.get("run_state") == "executing":
+        st.rerun()
     
 
 if __name__ == "__main__":
