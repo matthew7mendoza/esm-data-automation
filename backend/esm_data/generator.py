@@ -40,7 +40,7 @@ class DocumentGenerator:
     instructions: str
     templates: dict[str, TemplateConfig]
 
-    def __init__(self, provider: LLMProvider):
+    def __init__(self, provider: LLMProvider) -> None:
         if not provider:
             raise ValueError("An active LLM provider must be present!")
         self.provider = provider

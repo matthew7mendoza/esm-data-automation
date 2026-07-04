@@ -188,10 +188,12 @@ async def run_heavy_processing(
             if error_detail:
                 task.status = "FAILED"
                 task.detail = error_detail
-            else:
-                task.status = "COMPLETED"
-                task.report_json = json.dumps(report)
-                task.source_context = final_unified_context
+                await session.commit()
+                return
+            
+            task.status = "COMPLETED"
+            task.report_json = json.dumps(report)
+            task.source_context = final_unified_context
 
             await session.commit()
     

@@ -1,4 +1,3 @@
-from typing import Any
 import pytest
 from frontend.components.results import extract_source_assets
 

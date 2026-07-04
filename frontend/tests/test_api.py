@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import MagicMock, patch
 import requests
 import pytest
@@ -64,7 +63,7 @@ class TestFrontendAPIClient:
         mock_response.json.return_value = [{"task_id": "1234"}]
         mock_get.return_value = mock_response
 
-        result: list[dict[str, Any]] = fetch_all_historical_tasks()
+        result: list[dict[str, object]] = fetch_all_historical_tasks()
         assert result == [{"task_id": "1234"}]
 
     @patch("frontend.api.requests.get")
@@ -73,5 +72,5 @@ class TestFrontendAPIClient:
         mock_response.status_code = 500
         mock_get.return_value = mock_response
 
-        result: list[dict[str, Any]] = fetch_all_historical_tasks()
+        result: list[dict[str, object]] = fetch_all_historical_tasks()
         assert result == []

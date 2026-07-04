@@ -203,8 +203,8 @@ def _render_step_two_manual_entry(*, missing_questions: list[str], disabled: boo
 
 def _build_final_document_string(
     *,
-    extracted: dict[str, str],
-    missing: list[str]
+    extracted_answers: dict[str, str],
+    missing_questions: list[str]
 ) -> str:
     """
     Aggregates text chunks
@@ -212,15 +212,16 @@ def _build_final_document_string(
 
     document_blocks: list[str] = ["# Final Extracted Document\n\n"]
 
-    for question, answer in extracted.items():
-        document_blocks.append(f"### {question}\n{answer}\n\n")
+    for question_text, answer_text in extracted_answers.items():
+        document_blocks.append(f"### {question_text}\n{answer_text}\n\n")
     
-    for question in missing:
-        manual_answer: str = str(st.session_state.get(f"manual_{question}", "")).strip()
+    for question_text in missing_questions:
+        manual_answer: str = str(st.session_state.get(f"manual_{question_text}", "")).strip()
         if not manual_answer:
-            document_blocks.append(f"### {question}\n*No answer provided*\n\n")
-        else:
-            document_blocks.append(f"### {question}\n{manual_answer}\n\n")
+            document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
+            continue
+        
+        document_blocks.append(f"### {question_text}\n{manual_answer}\n\n")
 
     return "".join(document_blocks)
 
@@ -238,7 +239,7 @@ def _render_step_three_download(
 
     st.header("3. Download Final Document")
 
-    final_markdown: str = _build_final_document_string(extracted=extracted, missing=missing)
+    final_markdown: str = _build_final_document_string(extracted_answers=extracted, missing_questions=missing)
 
     st.download_button(
         label="Download Document (.md)",

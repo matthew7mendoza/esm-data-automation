@@ -1,9 +1,9 @@
 """
-Streamlit orchestation 
+Streamlit orchestration 
 """
 
 import time
-from typing import Any, cast
+from typing import cast
 
 import requests
 import streamlit as st
@@ -28,61 +28,61 @@ def send_generation_request(
 
     st.session_state.audit_metrics = None
 
-    file_payload = [
+    files_payload = [
         ("files", (file.name, file.getvalue(), file.type)) for file in uploaded_files
     ]
 
-    data_payload = {
+    request_payload = {
         "target_doc": target_document,
         "model_provider": MODEL_CONFIGURATIONS[chosen_engine],
         "custom_name": custom_name,
     }
 
     try:
-        response = requests.post(
+        generation_response = requests.post(
             f"{BACKEND_URL}/api/generate",
-            data=data_payload,
-            files=file_payload,
+            data=request_payload,
+            files=files_payload,
             timeout=60,
         )
     except requests.exceptions.RequestException as network_error:
         st.error(f"Could not reach background API layer... Error: {network_error}")
         return
     
-    if response.status_code not in (200, 202):
-        st.error(f"Backend processing failure: {response.json().get('detail')}")
+    if generation_response.status_code not in (200, 202):
+        st.error(f"Backend processing failure: {generation_response.json().get('detail')}")
         return
     
-    raw_task_id = response.json().get("task_id", "")
-    if not raw_task_id:
+    returned_task_id = generation_response.json().get("task_id", "")
+    if not returned_task_id:
         st.error("Invalid task response from processing node.")
         return
     
-    task_id = TaskId(raw_task_id)
+    validated_task_id = TaskId(returned_task_id)
     status_container = st.empty()
 
     for _ in range(450):
         status_container.info("AI is analyzing file and compiling documentation... Please wait...")
-        task_profile = get_task_profile(task_id=task_id)
+        current_task_profile = get_task_profile(task_id=validated_task_id)
 
-        if not task_profile:
+        if not current_task_profile:
             status_container.empty()
             st.error("Lost communication tracking link with backend processing!")
             return
         
-        status = task_profile.get("status")
+        current_task_status = current_task_profile.get("status")
 
-        if status == "FAILED":
+        if current_task_status == "FAILED":
             status_container.empty()
-            st.error(f"Processing routine crashed: {task_profile.get('detail')}")
+            st.error(f"Processing routine crashed: {current_task_profile.get('detail')}")
             return
         
-        if status != "COMPLETED":
+        if current_task_status != "COMPLETED":
             time.sleep(2)
             continue
 
-        st.session_state.generator_report = task_profile.get("report")
-        st.session_state.source_context = task_profile.get("source_context")
+        st.session_state.generator_report = current_task_profile.get("report")
+        st.session_state.source_context = current_task_profile.get("source_context")
 
         if "history_selectbox" in st.session_state:
             st.session_state.history_selectbox = "-- Select Past Run --"
@@ -97,12 +97,12 @@ def send_audit_request(
     answers: dict[str, str],
     judge_iterations: int,
     source_context: str
-) -> dict[str, Any] | None:
+) -> dict[str, object] | None:
     """
     Sends the generated answers to an AI judge to evaluate how consistent they are
     """
 
-    audit_payload = {
+    audit_payload: dict[str, str | int | dict[str, str]] = {
         "source_context": source_context,
         "answers": answers,
         "iterations": judge_iterations,
@@ -115,7 +115,7 @@ def send_audit_request(
     try:
         audit_response = requests.post(
             f"{BACKEND_URL}/api/audit",
-            json=cast(Any, audit_payload),
+            json=audit_payload,
             params=parameters,
             timeout=120
         )
@@ -127,14 +127,14 @@ def send_audit_request(
         st.error(f"Audit server error: {audit_response.json().get('detail')}")
         return None
     
-    metrics = cast(dict[str, Any], audit_response.json())
+    metrics = cast(dict[str, object], audit_response.json())
     st.session_state.audit_metrics = metrics
 
     st.success("Audit complete!")
 
-    metadata = metrics.get("metadata", {})
-    kappa_score = metadata.get("global_gwets_ac1", 0.0)
+    audit_metadata = cast(dict[str, object], metrics.get("metadata", {}))
+    gwet_agreement_score = cast(float, audit_metadata.get("global_gwets_ac1", 0.0))
 
-    st.metric("Agreement score (Gwet's AC1)", kappa_score)
+    st.metric("Agreement score (Gwet's AC1)", gwet_agreement_score)
     st.dataframe(metrics.get("item_level_stability_metrics", []), width="stretch")
     return metrics

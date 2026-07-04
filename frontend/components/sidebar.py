@@ -25,20 +25,20 @@ def _on_history_change() -> None:
     if selected_job_name == "-- Select Past Run --":
         return
     
-    task_mapping = st.session_state.get("task_mapping")
-    if not isinstance(task_mapping, dict):
+    task_id_mapping = st.session_state.get("task_mapping")
+    if not isinstance(task_id_mapping, dict):
         return
     
-    chosen_job = task_mapping.get(selected_job_name)
-    if not isinstance(chosen_job, dict):
+    selected_job_data = task_id_mapping.get(selected_job_name)
+    if not isinstance(selected_job_data, dict):
         return
     
-    task_id: str | None = cast(str | None, chosen_job.get("task_id"))
+    task_id: str | None = cast(str | None, selected_job_data.get("task_id"))
     if not task_id: 
         return
     
     try:
-        response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
+        task_profile_response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
     except requests.exceptions.RequestException as network_transport_fault:
         logger.error(
             "Network communication loss when trying to read historical data.",
@@ -49,21 +49,22 @@ def _on_history_change() -> None:
         )
         return
     
-    if response.status_code != 200:
+    if task_profile_response.status_code != 200:
         st.error("Failed to extract full analysis data from backend")
         return
     
-    full_job_payload: dict[str, object] = response.json()
+    job_details_payload: dict[str, object] = task_profile_response.json()
 
     st.session_state.current_task_id = task_id
-    st.session_state.generator_report = full_job_payload.get("report")
-    st.session_state.source_context = full_job_payload.get("source_context")
+    st.session_state.generator_report = job_details_payload.get("report")
+    st.session_state.source_context = job_details_payload.get("source_context")
 
-    historical_audits = st.session_state.get("historical_audits")
-    if isinstance(historical_audits, dict):
-        st.session_state.audit_metrics = historical_audits.get(task_id)
-    else:
+    historical_audit_records = st.session_state.get("historical_audits")
+    if not isinstance(historical_audit_records, dict):
         st.session_state.audit_metrics = None
+        return
+
+    st.session_state.audit_metrics = historical_audit_records.get(task_id)
 
 def render_historical_sidebar() -> None:
     """

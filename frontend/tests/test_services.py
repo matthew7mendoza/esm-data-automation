@@ -1,4 +1,3 @@
-from typing import Any
 from unittest.mock import MagicMock, patch
 import requests
 import pytest
@@ -11,7 +10,7 @@ class TestFrontendServices:
     def test_send_audit_request_success_flow(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
         mock_response: MagicMock = MagicMock()
         mock_response.status_code = 200
-        fake_metrics: dict[str, Any] = {
+        fake_metrics: dict[str, object] = {
             "metadata": {"global_gwets_ac1": 0.95},
             "item_level_stability_metrics": []
         }
@@ -20,7 +19,7 @@ class TestFrontendServices:
 
         mock_st.session_state = MagicMock()
 
-        result: dict[str, Any] | None = send_audit_request(
+        result: dict[str, object] | None = send_audit_request(
             chosen_engine="Gemini",
             answers={"Q1": "Yes"},
             judge_iterations=3,
@@ -39,7 +38,7 @@ class TestFrontendServices:
         mock_response.json.return_value = {"detail": "Validation Error"}
         mock_post.return_value = mock_response
 
-        result: dict[str, Any] | None = send_audit_request(
+        result: dict[str, object] | None = send_audit_request(
             chosen_engine="Gemini",
             answers={},
             judge_iterations=2,
@@ -54,7 +53,7 @@ class TestFrontendServices:
     def test_send_audit_request_network_error(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
         mock_post.side_effect = requests.exceptions.Timeout("Timeout")
 
-        result: dict[str, Any] | None = send_audit_request(
+        result: dict[str, object] | None = send_audit_request(
             chosen_engine="Gemini",
             answers={},
             judge_iterations=2,
