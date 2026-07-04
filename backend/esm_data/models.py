@@ -23,6 +23,7 @@ __all__ = [
     "TaskStatusResponse",
     "AuditRequest",
     "TemplateCreateRequest",
+    "TaskReportUpdateRequest",
 ]
 
 TaskId = NewType("TaskId", str)
@@ -192,4 +193,16 @@ class TemplateCreateRequest(BaseModel):
     name: str = Field(..., description="The unique name of the document form (e.g., 'DOI').")
     description: str | None = Field(None, description="Optional high-level technical description.")
     questions: list[str] = Field(..., description="Ordered list of questions")
+
+
+class TaskReportUpdateRequest(BaseModel):
+    """
+    Validates incoming JSON payload to update the extraction report of an existing task.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    extracted_answers: dict[str, str] = Field(..., description="Map of questions to their edited answers.")
+    missing_information: list[str] = Field(..., description="List of unanswered or missing questions.")
+
 

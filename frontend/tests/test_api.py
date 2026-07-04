@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 import requests
 import pytest
-from frontend.api import fetch_all_historical_tasks, fetch_server_templates, get_task_profile
+from frontend.api import fetch_all_historical_tasks, fetch_server_templates, get_task_profile, update_task_report
 from backend.esm_data.models import TaskId
 from frontend.protocols import TaskProfileDict
 
@@ -74,3 +74,27 @@ class TestFrontendAPIClient:
 
         result: list[dict[str, object]] = fetch_all_historical_tasks()
         assert result == []
+
+    @patch("frontend.api.requests.patch")
+    def test_update_task_report_success(self, mock_patch: MagicMock) -> None:
+        mock_response: MagicMock = MagicMock()
+        mock_response.status_code = 200
+        mock_patch.return_value = mock_response
+
+        result: bool = update_task_report(
+            task_id="1234",
+            extracted_answers={"Q1": "A1"},
+            missing_information=[]
+        )
+        assert result is True
+        mock_patch.assert_called_once()
+
+    @patch("frontend.api.requests.patch")
+    def test_update_task_report_failure(self, mock_patch: MagicMock) -> None:
+        mock_patch.side_effect = requests.exceptions.Timeout("Connection timed out")
+        result: bool = update_task_report(
+            task_id="1234",
+            extracted_answers={"Q1": "A1"},
+            missing_information=[]
+        )
+        assert result is False

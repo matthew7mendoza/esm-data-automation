@@ -24,7 +24,9 @@ dependencies = [
     "asyncpg",
     "python-dotenv",
     "click>=8.2",
-    "fremor"
+    "fremor",
+    "python-docx",
+    "httpx2"
 ]
 
 [tool.setuptools.packages.find]

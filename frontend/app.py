@@ -2,9 +2,11 @@
 Primary streamlit rendering
 """
 
+import io
 import logging
 from typing import Final, cast
 
+from docx import Document
 import streamlit as st
 
 from frontend.api import fetch_server_templates, fetch_all_historical_tasks
@@ -181,26 +183,6 @@ def _render_step_one_upload(
         st.rerun()
     return target_document
 
-def _render_step_two_manual_entry(*, missing_questions: list[str], disabled: bool) -> None:
-    """
-    Dynamically renders forms for users to fill AI-missed fields.
-    """
-
-    st.header("2. Add Additional Information")
-
-    if not missing_questions:
-        st.success("The AI successfully answered all questions! No additional info needed.")
-        return
-    
-    st.info(f"The AI missed {len(missing_questions)} question(s). You may optionally provide answers below:")
-
-    with st.form("manual_entry_form"):
-        for question in missing_questions:
-            st.text_area(label=question, key=f"manual_{question}", disabled=disabled)
-
-        if st.form_submit_button("Save Optional Responses", disabled=disabled):
-            st.success("Responses saved! You can generate your document below.")
-
 def _build_final_document_string(
     *,
     extracted_answers: dict[str, str],
@@ -216,14 +198,35 @@ def _build_final_document_string(
         document_blocks.append(f"### {question_text}\n{answer_text}\n\n")
     
     for question_text in missing_questions:
-        manual_answer: str = str(st.session_state.get(f"manual_{question_text}", "")).strip()
-        if not manual_answer:
-            document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
-            continue
-        
-        document_blocks.append(f"### {question_text}\n{manual_answer}\n\n")
+        document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
 
     return "".join(document_blocks)
+
+
+def _create_docx_buffer(
+    *,
+    extracted_answers: dict[str, str],
+    missing_questions: list[str]
+) -> bytes:
+    """
+    Generates a Microsoft Word (.docx) document in memory and returns bytes.
+    """
+
+    doc = Document()
+    doc.add_heading("Final Extracted Document", level=0)
+
+    for question_text, answer_text in extracted_answers.items():
+        doc.add_heading(question_text, level=2)
+        doc.add_paragraph(answer_text)
+    
+    for question_text in missing_questions:
+        doc.add_heading(question_text, level=2)
+        p = doc.add_paragraph()
+        p.add_run("No answer provided").italic = True
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
 
 
 def _render_step_three_download(
@@ -239,16 +242,39 @@ def _render_step_three_download(
 
     st.header("3. Download Final Document")
 
-    final_markdown: str = _build_final_document_string(extracted_answers=extracted, missing_questions=missing)
-
-    st.download_button(
-        label="Download Document (.md)",
-        data=final_markdown,
-        file_name=f"{target_document}_completed.md",
-        mime="text/markdown",
-        type="primary",
+    download_format = st.radio(
+        "Choose Download Format",
+        options=["Markdown (.md)", "Microsoft Word (.docx)"],
+        horizontal=True,
         disabled=disabled
     )
+
+    if download_format == "Markdown (.md)":
+        final_markdown: str = _build_final_document_string(
+            extracted_answers=extracted,
+            missing_questions=missing
+        )
+        st.download_button(
+            label="Download Document (.md)",
+            data=final_markdown,
+            file_name=f"{target_document}_completed.md",
+            mime="text/markdown",
+            type="primary",
+            disabled=disabled
+        )
+    else:
+        final_docx: bytes = _create_docx_buffer(
+            extracted_answers=extracted,
+            missing_questions=missing
+        )
+        st.download_button(
+            label="Download Document (.docx)",
+            data=final_docx,
+            file_name=f"{target_document}_completed.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            type="primary",
+            disabled=disabled
+        )
 
 def _render_generator_tab(
     *,
@@ -271,14 +297,11 @@ def _render_generator_tab(
     if not report:
         return
     
-    render_answers_and_missing_sections()
+    render_answers_and_missing_sections(disabled=is_running)
     st.markdown("---")
 
     missing_question: list[str] = report.get("missing_information", [])
     extracted_answers: dict[str, str] = report.get("extracted_answers", {})
-
-    _render_step_two_manual_entry(missing_questions=missing_question, disabled=is_running)
-    st.markdown("---")
 
     _render_step_three_download(
         target_document=target_document,

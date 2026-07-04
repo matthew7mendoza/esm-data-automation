@@ -44,7 +44,8 @@ from backend.esm_data.models import (
     TaskStatusResponse,
     TemplateCreateRequest,
     TaskId,
-    ExtractionReport
+    ExtractionReport,
+    TaskReportUpdateRequest
 )
 from backend.esm_data.providers import get_provider
 from backend.seed import seed_data_from_yaml
@@ -294,6 +295,34 @@ async def get_task_status(task_id: TaskId, session: AsyncSession = Depends(get_d
         detail=task.detail,
         source_context=task.source_context
     )
+
+
+@app.patch("/api/tasks/{task_id}/report", status_code=status.HTTP_200_OK)
+async def update_task_report(
+    *,
+    task_id: TaskId,
+    payload: TaskReportUpdateRequest,
+    session: AsyncSession = Depends(get_db_session)
+) -> dict[str, str]:
+    """
+    Update the extraction report for an existing task.
+    Allows scientists to save manual edits back to the DB.
+    """
+    if not (task := await session.get(Task, task_id)):
+        raise HTTPException(status_code=404, detail="The requested job does not exist.")
+
+    # Serialize incoming report structure and save to task
+    task.report_json = json.dumps({
+        "extracted_answers": payload.extracted_answers,
+        "missing_information": payload.missing_information
+    })
+    session.add(task)
+    await session.commit()
+    return {
+        "status": "SUCCESS",
+        "message": "Task report successfully updated."
+    }
+
 
 @app.post("/api/templates", status_code=status.HTTP_201_CREATED)
 async def create_custom_template(
