@@ -22,7 +22,9 @@ dependencies = [
     "sqlmodel",
     "aiosqlite",
     "asyncpg",
-    "python-dotenv"
+    "python-dotenv",
+    "click>=8.2",
+    "fremor"
 ]
 
 [tool.setuptools.packages.find]
@@ -31,7 +33,8 @@ include = ["backend*", "frontend*"]
 
 [project.optional-dependencies]
 dev = [
-    "mypy"
+    "mypy",
+    "pytest"
 ]
 
 [tool.mypy]
@@ -40,3 +43,11 @@ warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q"
+testpaths = [
+    "backend",
+    "frontend"
+]
