@@ -58,6 +58,7 @@ def _on_history_change() -> None:
     st.session_state.current_task_id = task_id
     st.session_state.generator_report = job_details_payload.get("report")
     st.session_state.source_context = job_details_payload.get("source_context")
+    st.session_state.current_task_custom_name = job_details_payload.get("custom_name")
 
     historical_audit_records = st.session_state.get("historical_audits")
     if not isinstance(historical_audit_records, dict):

@@ -72,7 +72,8 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
         with tab_extracted:
             if not extracted_answers:
                 st.info("No answers were extracted by the AI.")
-            else:
+            
+            if extracted_answers:
                 for question, answer in extracted_answers.items():
                     field_key = f"ans_{current_task_id}_{question}"
                     user_val = st.text_area(
@@ -81,15 +82,17 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
                         key=field_key,
                         disabled=disabled
                     )
-                    if user_val.strip():
-                        updated_extracted[question] = user_val.strip()
-                    else:
+                    if not user_val.strip():
                         updated_missing.append(question)
+                        continue
+                    
+                    updated_extracted[question] = user_val.strip()
 
         with tab_missing:
             if not missing_information:
                 st.success("All questions have answers! No missing fields.")
-            else:
+            
+            if missing_information:
                 st.info("The AI missed these questions. You can fill them in below:")
                 for question in missing_information:
                     field_key = f"ans_{current_task_id}_{question}"
@@ -99,28 +102,32 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
                         key=field_key,
                         disabled=disabled
                     )
-                    if user_val.strip():
-                        updated_extracted[question] = user_val.strip()
-                    else:
+                    if not user_val.strip():
                         updated_missing.append(question)
+                        continue
+                    
+                    updated_extracted[question] = user_val.strip()
 
         col1, _ = st.columns([1, 4])
         with col1:
             save_button = st.form_submit_button("Save Changes", disabled=disabled)
 
-        if save_button:
-            success = update_task_report(
-                task_id=current_task_id,
-                extracted_answers=updated_extracted,
-                missing_information=updated_missing
-            )
-            if success:
-                new_report = {
-                    "extracted_answers": updated_extracted,
-                    "missing_information": updated_missing
-                }
-                st.session_state.generator_report = new_report
-                st.toast("Changes saved successfully!")
-                st.rerun()
-            else:
-                st.error("Failed to save changes to backend database.")
+        if not save_button:
+            return
+
+        success = update_task_report(
+            task_id=current_task_id,
+            extracted_answers=updated_extracted,
+            missing_information=updated_missing
+        )
+        if not success:
+            st.error("Failed to save changes to backend database.")
+            return
+
+        new_report = {
+            "extracted_answers": updated_extracted,
+            "missing_information": updated_missing
+        }
+        st.session_state.generator_report = new_report
+        st.toast("Changes saved successfully!")
+        st.rerun()

@@ -34,6 +34,7 @@ def _initialize_session_state() -> None:
         "audit_metrics": None,
         "job_running": False,
         "current_task_id": None,
+        "current_task_custom_name": None,
         "historical_audits": {},
         "run_state": "idle"
     }
@@ -109,7 +110,8 @@ def _purge_workspace_heap() -> None:
         "generator_report",
         "source_context",
         "audit_metrics",
-        "current_task_id"
+        "current_task_id",
+        "current_task_custom_name"
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
@@ -249,6 +251,14 @@ def _render_step_three_download(
         disabled=disabled
     )
 
+    base_name = f"{target_document}_completed"
+    custom_name = st.session_state.get("current_task_custom_name")
+    if custom_name and isinstance(custom_name, str) and custom_name.strip():
+        cleaned_name = custom_name.strip()
+        for char in r'\/:*?"<>|':
+            cleaned_name = cleaned_name.replace(char, "_")
+        base_name = cleaned_name
+
     if download_format == "Markdown (.md)":
         final_markdown: str = _build_final_document_string(
             extracted_answers=extracted,
@@ -257,7 +267,7 @@ def _render_step_three_download(
         st.download_button(
             label="Download Document (.md)",
             data=final_markdown,
-            file_name=f"{target_document}_completed.md",
+            file_name=f"{base_name}.md",
             mime="text/markdown",
             type="primary",
             disabled=disabled
@@ -270,7 +280,7 @@ def _render_step_three_download(
         st.download_button(
             label="Download Document (.docx)",
             data=final_docx,
-            file_name=f"{target_document}_completed.docx",
+            file_name=f"{base_name}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary",
             disabled=disabled

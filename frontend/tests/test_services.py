@@ -84,7 +84,7 @@ class TestFrontendServices:
 
         mock_get_profile.side_effect = [
             {"status": "PENDING"},
-            {"status": "COMPLETED", "report": "some_report", "source_context": "some_context"}
+            {"status": "COMPLETED", "report": "some_report", "source_context": "some_context", "custom_name": "MyTest"}
         ]
 
         mock_file: MagicMock = MagicMock()
@@ -100,6 +100,8 @@ class TestFrontendServices:
         )
 
         mock_st.success.assert_called_with("Answers successfully written!")
+        assert mock_st.session_state.current_task_id == "task-abc"
+        assert mock_st.session_state.current_task_custom_name == "MyTest"
 
     @patch("frontend.services.st")
     @patch("frontend.services.requests.post")

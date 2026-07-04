@@ -83,6 +83,8 @@ def send_generation_request(
 
         st.session_state.generator_report = current_task_profile.get("report")
         st.session_state.source_context = current_task_profile.get("source_context")
+        st.session_state.current_task_id = returned_task_id
+        st.session_state.current_task_custom_name = current_task_profile.get("custom_name")
 
         if "history_selectbox" in st.session_state:
             st.session_state.history_selectbox = "-- Select Past Run --"
