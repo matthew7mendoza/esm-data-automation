@@ -3,6 +3,7 @@ FastAPI backend
 uvicorn api:app --reload --port 8000
 """
 import asyncio
+from collections.abc import AsyncIterator
 import json
 import logging
 import shutil
@@ -64,7 +65,7 @@ class GenerationPayload:
     files: list[UploadFile] = File(...)
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """
     Manages action when sever boots up and handles when server boots down
     """
