@@ -228,3 +228,34 @@ data/esm_form_automation.db
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
+# Core Python & System Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+
+# Specialized Testing & Static Typing Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Environments & Build Artifacts
+.venv/
+venv/
+env/
+build/
+dist/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Local Environment Secrets (CRITICAL)
+.env
+.env.*
+!.env.example
+
+# Local OS Specific Clutter
+.DS_Store
+Thumbs.db
