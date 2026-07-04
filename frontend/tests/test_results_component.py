@@ -77,7 +77,7 @@ class TestResultsComponentRender:
                 "Question 1": "Answer 1 Edited",
                 "Question 2": "Answer 2 Filled"
             },
-            missing_information=[]
+            missing_information=["Question 2"]
         )
         mock_st.toast.assert_called_once_with("Changes saved successfully!")
         mock_st.rerun.assert_called_once()
@@ -86,5 +86,5 @@ class TestResultsComponentRender:
                 "Question 1": "Answer 1 Edited",
                 "Question 2": "Answer 2 Filled"
             },
-            "missing_information": []
+            "missing_information": ["Question 2"]
         }

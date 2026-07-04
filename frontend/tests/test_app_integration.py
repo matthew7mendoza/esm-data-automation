@@ -5,9 +5,17 @@ class TestStreamlitAppIntegration:
 
     @patch("frontend.app.fetch_server_templates")
     @patch("frontend.app.fetch_all_historical_tasks")
-    def test_app_initializes_cleanly(self, mock_historical: MagicMock, mock_templates: MagicMock) -> None:
+    @patch("frontend.components.sidebar.requests.get")
+    def test_app_initializes_cleanly(
+        self, mock_get: MagicMock, mock_historical: MagicMock, mock_templates: MagicMock
+    ) -> None:
         mock_templates.return_value = ["TEMPLATE_A"]
         mock_historical.return_value = []
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = []
+        mock_get.return_value = mock_response
 
         at: AppTest = AppTest.from_file("frontend/app.py").run()
 

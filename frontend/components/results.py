@@ -67,14 +67,14 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
         )
 
         updated_extracted: dict[str, str] = {}
-        updated_missing: list[str] = []
+        updated_missing: list[str] = list(missing_information)
 
         with tab_extracted:
-            if not extracted_answers:
+            visible_extracted = {q: a for q, a in extracted_answers.items() if q not in missing_information}
+            if not visible_extracted:
                 st.info("No answers were extracted by the AI.")
-            
-            if extracted_answers:
-                for question, answer in extracted_answers.items():
+            else:
+                for question, answer in visible_extracted.items():
                     field_key = f"ans_{current_task_id}_{question}"
                     user_val = st.text_area(
                         label=question,
@@ -83,7 +83,8 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
                         disabled=disabled
                     )
                     if not user_val.strip():
-                        updated_missing.append(question)
+                        if question not in updated_missing:
+                            updated_missing.append(question)
                         continue
                     
                     updated_extracted[question] = user_val.strip()
@@ -91,19 +92,18 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
         with tab_missing:
             if not missing_information:
                 st.success("All questions have answers! No missing fields.")
-            
-            if missing_information:
+            else:
                 st.info("The AI missed these questions. You can fill them in below:")
                 for question in missing_information:
                     field_key = f"ans_{current_task_id}_{question}"
+                    saved_value = extracted_answers.get(question, "")
                     user_val = st.text_area(
                         label=question,
-                        value="",
+                        value=saved_value,
                         key=field_key,
                         disabled=disabled
                     )
                     if not user_val.strip():
-                        updated_missing.append(question)
                         continue
                     
                     updated_extracted[question] = user_val.strip()

@@ -108,6 +108,26 @@ def render_historical_sidebar() -> None:
     st.session_state.task_mapping = task_options
     options_list = ["-- Select Past Run --", *task_options]
 
+    current_task_id = st.session_state.get("current_task_id")
+    if current_task_id:
+        matching_option = next(
+            (opt for opt, task in task_options.items() if str(task["task_id"]) == str(current_task_id)),
+            None
+        )
+        if matching_option:
+            st.session_state.history_selectbox = matching_option
+    else:
+        latest_task = completed_tasks[-1]
+        task_id = str(latest_task["task_id"])
+        st.session_state.current_task_id = task_id
+        st.session_state.generator_report = latest_task.get("report")
+        st.session_state.source_context = latest_task.get("source_context")
+        st.session_state.current_task_custom_name = latest_task.get("custom_name")
+
+        custom_name = latest_task.get("custom_name")
+        display_name = f"{custom_name} ({task_id[:8]})" if custom_name else f"Job {task_id[:8]}"
+        st.session_state.history_selectbox = display_name
+
     st.sidebar.selectbox(
         "Reload a past analysis:",
         options=options_list,

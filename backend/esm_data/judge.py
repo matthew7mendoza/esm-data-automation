@@ -11,6 +11,7 @@ import logging
 from pathlib import Path
 from typing import Final, Literal, Never, TypedDict, cast
 
+import google.genai.errors
 import openai
 import yaml
 
@@ -195,7 +196,7 @@ class LLMJudge:
 
                 return item_id, run_index, response.answer, response.justification
             
-            except (openai.OpenAIError, ValueError, TypeError, RuntimeError) as api_operational_fault:
+            except (openai.OpenAIError, google.genai.errors.APIError, ValueError, TypeError, RuntimeError) as api_operational_fault:
                 logger.error(f"Async evaluation operational fault on item {item_id}, run {run_index}: {api_operational_fault}")
                 return item_id, run_index, "No", f"Execution Exception Intercepted: {api_operational_fault}"
     

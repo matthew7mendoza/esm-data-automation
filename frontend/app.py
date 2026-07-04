@@ -200,7 +200,8 @@ def _build_final_document_string(
         document_blocks.append(f"### {question_text}\n{answer_text}\n\n")
     
     for question_text in missing_questions:
-        document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
+        if question_text not in extracted_answers:
+            document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
 
     return "".join(document_blocks)
 
@@ -222,9 +223,10 @@ def _create_docx_buffer(
         doc.add_paragraph(answer_text)
     
     for question_text in missing_questions:
-        doc.add_heading(question_text, level=2)
-        p = doc.add_paragraph()
-        p.add_run("No answer provided").italic = True
+        if question_text not in extracted_answers:
+            doc.add_heading(question_text, level=2)
+            p = doc.add_paragraph()
+            p.add_run("No answer provided").italic = True
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -357,6 +359,12 @@ def _render_judge_tab(
     if not completed_tasks:
         st.info("No completed tasks found in database, create an extraction run first!")
         return
+
+    # Sync selection to the currently active task
+    current_task_id = st.session_state.get("current_task_id")
+    if not current_task_id:
+        current_task_id = str(completed_tasks[-1]["task_id"])
+        st.session_state.current_task_id = current_task_id
     
     # create dictionary mapping each complete tasks full ID to human readable dropdown label
     # uses custom name, else fall back unnamed run with 8 char snippet
@@ -365,12 +373,38 @@ def _render_judge_tab(
         for task in completed_tasks 
     }
 
+    options_keys = list(task_options.keys())
+    try:
+        default_index = options_keys.index(str(current_task_id))
+    except ValueError:
+        default_index = 0
+
     chosen_task_id: str = st.selectbox(
         "Select a Run to Evaluate",
-        options=list(task_options.keys()),
+        options=options_keys,
+        index=default_index,
         format_func=lambda tid: task_options[tid],
         disabled=disabled
     )
+
+    if chosen_task_id != current_task_id:
+        st.session_state.current_task_id = chosen_task_id
+        new_task = next(t for t in completed_tasks if str(t["task_id"]) == chosen_task_id)
+        st.session_state.generator_report = new_task.get("report")
+        st.session_state.source_context = new_task.get("source_context")
+        st.session_state.current_task_custom_name = new_task.get("custom_name")
+
+        custom_name = new_task.get("custom_name")
+        display_name = f"{custom_name} ({chosen_task_id[:8]})" if custom_name else f"Job {chosen_task_id[:8]}"
+        st.session_state.history_selectbox = display_name
+
+        historical_audit_records = st.session_state.get("historical_audits")
+        if isinstance(historical_audit_records, dict):
+            st.session_state.audit_metrics = historical_audit_records.get(chosen_task_id)
+        else:
+            st.session_state.audit_metrics = None
+
+        st.rerun()
 
     chosen_engine: str = st.selectbox("Select Evaluating AI Judge", models, disabled=disabled)
 
@@ -415,21 +449,19 @@ def _render_judge_tab(
     
     audit_metrics: dict | None = st.session_state.get("audit_metrics")
     if audit_metrics:
-        current_task_id: str | None = st.session_state.get("current_task_id")
-        if current_task_id == chosen_task_id:
-            st.markdown("---")
-            st.success("Audit complete!")
+        st.markdown("---")
+        st.success("Audit complete!")
 
-            metadata: dict = audit_metrics.get("metadata", {})
-            kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
-                "global_gwets_ac1", 0.0
-            )
+        metadata: dict = audit_metrics.get("metadata", {})
+        kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
+            "global_gwets_ac1", 0.0
+        )
 
-            st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
-            st.dataframe(
-                audit_metrics.get("item_level_stability_metrics", []),
-                use_container_width=True,
-            )
+        st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
+        st.dataframe(
+            audit_metrics.get("item_level_stability_metrics", []),
+            use_container_width=True,
+        )
 
     
 def main() -> None:
