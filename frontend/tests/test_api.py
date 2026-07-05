@@ -1,4 +1,4 @@
-from typing import Any, cast
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -49,7 +49,9 @@ class TestFrontendAPIClient:
         mock_get.return_value = mock_response
 
         result: TaskProfileDict | None = get_task_profile(task_id=TaskId("1234"))
-        assert result == cast(Any, {"task_id": "1234", "status": "COMPLETED"})
+        assert result == cast(
+            TaskProfileDict, {"task_id": "1234", "status": "COMPLETED"}
+        )
 
     @patch("frontend.api.requests.get")
     def test_get_task_profile_suppresses_error_and_returns_none(

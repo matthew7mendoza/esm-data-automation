@@ -1,4 +1,4 @@
-from typing import Any
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,7 +9,7 @@ from frontend.components.results import (
 )
 
 
-class MockSessionState(dict[str, Any]):
+class MockSessionState(dict[str, object]):
     """
     A dictionary subclass that allows attribute access to mock
     Streamlit's session state.

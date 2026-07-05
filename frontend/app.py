@@ -4,7 +4,7 @@ Primary streamlit rendering
 
 import io
 import logging
-from typing import Any, Final, cast
+from typing import Final, cast
 
 import streamlit as st
 from docx import Document
@@ -29,7 +29,7 @@ def _initialize_session_state() -> None:
     Set up core streamlit session with explicit mutation
     """
 
-    defaults: dict[str, bool | dict[str, Any] | str | None] = {
+    defaults: dict[str, bool | dict[str, object] | str | None] = {
         "generator_report": None,
         "source_context": None,
         "audit_metrics": None,
@@ -44,69 +44,74 @@ def _initialize_session_state() -> None:
         st.session_state.setdefault(key, value)
 
 
+def _handle_pending_generation(generation_args: object) -> None:
+    if not isinstance(generation_args, dict):
+        return
+    send_generation_request(
+        target_document=cast(str, generation_args.get("target_document", "")),
+        chosen_engine=cast(str, generation_args.get("chosen_engine", "")),
+        uploaded_files=cast(
+            list[UploadedFileProtocol],
+            generation_args.get("uploaded_files", []),
+        ),
+        custom_name=cast(str, generation_args.get("custom_name", "")),
+    )
+    st.session_state.job_running = False
+    st.rerun()
+
+
+def _handle_pending_audit(audit_args: object) -> None:
+    if not isinstance(audit_args, dict):
+        return
+    args_copy = dict(audit_args)
+    task_id: str = str(args_copy.pop("task_id", ""))
+    metrics = send_audit_request(
+        chosen_engine=cast(str, args_copy.get("chosen_engine", "")),
+        answers=cast(dict[str, str], args_copy.get("answers", {})),
+        judge_iterations=cast(int, args_copy.get("judge_iterations", 3)),
+        source_context=cast(str, args_copy.get("source_context", "")),
+    )
+    if metrics:
+        st.session_state.audit_metrics = metrics
+        historical_audits = st.session_state.get("historical_audits")
+        if not isinstance(historical_audits, dict):
+            historical_audits = {}
+        historical_audits[task_id] = metrics
+        st.session_state.historical_audits = historical_audits
+
+    st.session_state.job_running = False
+    st.rerun()
+
+
+def _should_execute_pending_job() -> bool:
+    if not st.session_state.get("job_running"):
+        return False
+    run_state = st.session_state.get("run_state", "idle")
+    if run_state == "triggered":
+        st.session_state.run_state = "executing"
+        return False
+    if run_state != "executing":
+        return False
+    st.session_state.run_state = "idle"
+    return True
+
+
 def _process_pending_jobs() -> None:
     """
     Executes queded background tasks
     then refreshes the app
     """
 
-    if not st.session_state.get("job_running"):
+    if not _should_execute_pending_job():
         return
 
-    run_state = st.session_state.get("run_state", "idle")
-    if run_state == "triggered":
-        # Transition from triggered to executing. Do not execute the
-        # blocking request yet. This allows Streamlit to finish rendering
-        # the current page, which will disable all buttons in the browser.
-        st.session_state.run_state = "executing"
+    if "pending_generation" in st.session_state:
+        _handle_pending_generation(st.session_state.pop("pending_generation"))
         return
 
-    if run_state == "executing":
-        # Transition from executing to idle, and now execute the actual
-        # blocking job. The browser is already showing the disabled UI,
-        # so the user cannot double-click.
-        st.session_state.run_state = "idle"
-
-        if "pending_generation" in st.session_state:
-            generation_args = st.session_state.pop("pending_generation")
-            if isinstance(generation_args, dict):
-                send_generation_request(
-                    target_document=cast(
-                        str, generation_args.get("target_document", "")
-                    ),
-                    chosen_engine=cast(str, generation_args.get("chosen_engine", "")),
-                    uploaded_files=cast(
-                        list[UploadedFileProtocol],
-                        generation_args.get("uploaded_files", []),
-                    ),
-                    custom_name=cast(str, generation_args.get("custom_name", "")),
-                )
-            st.session_state.job_running = False
-            st.rerun()
-            return
-
-        if "pending_audit" in st.session_state:
-            audit_args = st.session_state.pop("pending_audit")
-            if isinstance(audit_args, dict):
-                task_id: str = str(audit_args.pop("task_id", ""))
-                metrics = send_audit_request(
-                    chosen_engine=cast(str, audit_args.get("chosen_engine", "")),
-                    answers=cast(dict[str, str], audit_args.get("answers", {})),
-                    judge_iterations=cast(int, audit_args.get("judge_iterations", 3)),
-                    source_context=cast(str, audit_args.get("source_context", "")),
-                )
-                if metrics:
-                    st.session_state.audit_metrics = metrics
-
-                    historical_audits = st.session_state.get("historical_audits")
-                    if not isinstance(historical_audits, dict):
-                        historical_audits = {}
-                    historical_audits[task_id] = metrics
-                    st.session_state.historical_audits = historical_audits
-
-            st.session_state.job_running = False
-            st.rerun()
-            return
+    if "pending_audit" in st.session_state:
+        _handle_pending_audit(st.session_state.pop("pending_audit"))
+        return
 
 
 def _purge_workspace_heap() -> None:
@@ -307,15 +312,19 @@ def _render_generator_tab(
         models=models,
     )
 
-    report: dict[str, Any] | None = st.session_state.get("generator_report")
+    report = cast(dict[str, object] | None, st.session_state.get("generator_report"))
     if not report:
         return
 
     render_answers_and_missing_sections(disabled=is_running)
     st.markdown("---")
 
-    missing_question: list[str] = report.get("missing_information", [])
-    extracted_answers: dict[str, str] = report.get("extracted_answers", {})
+    missing_question: list[str] = cast(
+        list[str], report.get("missing_information", [])
+    )
+    extracted_answers: dict[str, str] = cast(
+        dict[str, str], report.get("extracted_answers", {})
+    )
 
     _render_step_three_download(
         target_document=target_document,
@@ -324,20 +333,83 @@ def _render_generator_tab(
         disabled=is_running,
     )
 
-    audit_metrics: dict[str, Any] | None = st.session_state.get("audit_metrics")
+    audit_metrics = cast(
+        dict[str, object] | None, st.session_state.get("audit_metrics")
+    )
     if not audit_metrics:
         return
 
     st.markdown("---")
     st.subheader("Complete run snapshot")
-    metadata: dict[str, Any] = audit_metrics.get("metadata", {})
-    kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
-        "global_gwets_ac1", 0.0
+    metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
+    kappa_score = cast(
+        float,
+        metadata.get("global_gwet_ac1") or metadata.get("global_gwets_ac1", 0.0),
     )
 
-    st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
+    st.metric("Agreement score (Gwet's AC1)", f"{kappa_score:.3f}")
     st.dataframe(
-        audit_metrics.get("item_level_stability_metrics", []), use_container_width=True
+        cast(list[object], audit_metrics.get("item_level_stability_metrics", [])),
+        use_container_width=True,
+    )
+
+
+def _get_currently_active_task(
+    historical_tasks: list[dict[str, object]], task_id: str | None
+) -> dict[str, object] | None:
+    if not task_id:
+        return None
+    for task in historical_tasks:
+        if (
+            task.get("status") == "COMPLETED"
+            and task.get("report") is not None
+            and str(task.get("task_id")) == str(task_id)
+        ):
+            return task
+    return None
+
+
+def _trigger_stability_test(
+    task_id: str,
+    active_task_data: dict[str, object],
+    chosen_engine: str,
+    judge_iterations: int,
+) -> None:
+    report_data = active_task_data.get("report") or {}
+    extracted_answers_dict = (
+        report_data.get("extracted_answers", {})
+        if isinstance(report_data, dict)
+        else {}
+    )
+
+    st.session_state.job_running = True
+    st.session_state.run_state = "triggered"
+    st.session_state.pending_audit = {
+        "task_id": task_id,
+        "chosen_engine": chosen_engine,
+        "judge_iterations": judge_iterations,
+        "answers": extracted_answers_dict,
+        "source_context": active_task_data.get("source_context", ""),
+    }
+    st.rerun()
+
+
+def _render_audit_results(audit_metrics: dict[str, object] | None) -> None:
+    if not audit_metrics:
+        return
+    st.markdown("---")
+    st.success("Audit complete!")
+
+    metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
+    kappa_score = cast(
+        float,
+        metadata.get("global_gwet_ac1") or metadata.get("global_gwets_ac1", 0.0),
+    )
+
+    st.metric("Agreement score (Gwet's AC1)", f"{kappa_score:.3f}")
+    st.dataframe(
+        cast(list[object], audit_metrics.get("item_level_stability_metrics", [])),
+        use_container_width=True,
     )
 
 
@@ -353,40 +425,15 @@ def _render_judge_tab(*, disabled: bool, models: list[str]) -> None:
     )
 
     historical_tasks: list[dict[str, object]] = fetch_all_historical_tasks()
-
-    completed_historical_tasks_list: list[dict[str, object]] = [
-        task
-        for task in historical_tasks
-        if task.get("status") == "COMPLETED" and task.get("report") is not None
-    ]
-
-    if not completed_historical_tasks_list:
-        st.info("No completed tasks found in database. Create an extraction run first!")
-        return
-
     currently_selected_task_id: str | None = st.session_state.get("current_task_id")
-
-    if not currently_selected_task_id:
-        st.info(
-            "Please upload files under the 'Document Generator' tab or "
-            "select a past run from the sidebar to evaluate."
-        )
-        return
-
-    # Find the corresponding task data for the currently selected task ID
-    currently_active_task_data = next(
-        (
-            task
-            for task in completed_historical_tasks_list
-            if str(task["task_id"]) == str(currently_selected_task_id)
-        ),
-        None,
+    currently_active_task_data = _get_currently_active_task(
+        historical_tasks, currently_selected_task_id
     )
 
     if not currently_active_task_data:
-        st.warning(
-            "The selected run could not be found in the database. "
-            "Please select another run from the sidebar."
+        st.info(
+            "Please upload files under the 'Document Generator' tab or "
+            "select a past run from the sidebar to evaluate."
         )
         return
 
@@ -419,39 +466,17 @@ def _render_judge_tab(*, disabled: bool, models: list[str]) -> None:
     )
 
     if st.button("Run Stability Test", type="primary", disabled=disabled):
-        report_data = currently_active_task_data.get("report") or {}
-        extracted_answers_dict = (
-            report_data.get("extracted_answers", {})
-            if isinstance(report_data, dict)
-            else {}
+        _trigger_stability_test(
+            cast(str, currently_selected_task_id),
+            currently_active_task_data,
+            chosen_engine,
+            judge_iterations,
         )
 
-        st.session_state.job_running = True
-        st.session_state.run_state = "triggered"
-        st.session_state.pending_audit = {
-            "task_id": currently_selected_task_id,
-            "chosen_engine": chosen_engine,
-            "judge_iterations": judge_iterations,
-            "answers": extracted_answers_dict,
-            "source_context": currently_active_task_data.get("source_context", ""),
-        }
-        st.rerun()
-
-    audit_metrics: dict[str, Any] | None = st.session_state.get("audit_metrics")
-    if audit_metrics:
-        st.markdown("---")
-        st.success("Audit complete!")
-
-        metadata: dict[str, Any] = audit_metrics.get("metadata", {})
-        kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
-            "global_gwets_ac1", 0.0
-        )
-
-        st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
-        st.dataframe(
-            audit_metrics.get("item_level_stability_metrics", []),
-            use_container_width=True,
-        )
+    audit_metrics = cast(
+        dict[str, object] | None, st.session_state.get("audit_metrics")
+    )
+    _render_audit_results(audit_metrics)
 
 
 def main() -> None:

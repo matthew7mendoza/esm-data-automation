@@ -97,7 +97,7 @@ extend-immutable-calls = [
 
 
 [tool.ruff.lint.mccabe]
-max-complexity = 10
+max-complexity = 5
 
 
 [tool.ruff.format]

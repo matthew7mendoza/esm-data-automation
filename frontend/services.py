@@ -11,9 +11,62 @@ import streamlit as st
 from backend.esm_data.models import TaskId
 from frontend.api import get_task_profile
 from frontend.config import BACKEND_URL, MODEL_CONFIGURATIONS
-from frontend.protocols import UploadedFileProtocol
+from frontend.protocols import TaskProfileDict, UploadedFileProtocol
 
 __all__ = ["send_audit_request", "send_generation_request"]
+
+
+def _save_completed_generation(
+    profile: TaskProfileDict, returned_task_id: str
+) -> None:
+    st.session_state.generator_report = profile.get("report")
+    st.session_state.source_context = profile.get("source_context")
+    st.session_state.current_task_id = returned_task_id
+    st.session_state.current_task_custom_name = profile.get("custom_name")
+
+    if "history_selectbox" in st.session_state:
+        st.session_state.history_selectbox = "-- Select Past Run --"
+
+
+def _poll_generation_task(
+    validated_task_id: TaskId,
+    returned_task_id: str,
+    status_container: object,
+) -> bool:
+    """
+    Polls the task until it succeeds, fails, or times out.
+    Returns True if completed successfully, False otherwise.
+    """
+    # Streamlit delta generator container
+    container = cast(st.delta_generator.DeltaGenerator, status_container)
+    for _ in range(450):
+        container.info(
+            "AI is analyzing file and compiling documentation... Please wait..."
+        )
+        profile = get_task_profile(task_id=validated_task_id)
+        if not profile:
+            container.empty()
+            st.error("Lost communication tracking link with backend processing!")
+            return False
+
+        status = profile.get("status")
+        if status == "FAILED":
+            container.empty()
+            st.error(f"Processing routine crashed: {profile.get('detail')}")
+            return False
+
+        if status != "COMPLETED":
+            time.sleep(2)
+            continue
+
+        _save_completed_generation(profile, returned_task_id)
+        container.empty()
+        st.success("Answers successfully written!")
+        return True
+
+    container.empty()
+    st.error("Task timed out.")
+    return False
 
 
 def send_generation_request(
@@ -63,44 +116,7 @@ def send_generation_request(
 
     validated_task_id = TaskId(returned_task_id)
     status_container = st.empty()
-
-    for _ in range(450):
-        status_container.info(
-            "AI is analyzing file and compiling documentation... Please wait..."
-        )
-        current_task_profile = get_task_profile(task_id=validated_task_id)
-
-        if not current_task_profile:
-            status_container.empty()
-            st.error("Lost communication tracking link with backend processing!")
-            return
-
-        current_task_status = current_task_profile.get("status")
-
-        if current_task_status == "FAILED":
-            status_container.empty()
-            st.error(
-                f"Processing routine crashed: {current_task_profile.get('detail')}"
-            )
-            return
-
-        if current_task_status != "COMPLETED":
-            time.sleep(2)
-            continue
-
-        st.session_state.generator_report = current_task_profile.get("report")
-        st.session_state.source_context = current_task_profile.get("source_context")
-        st.session_state.current_task_id = returned_task_id
-        st.session_state.current_task_custom_name = current_task_profile.get(
-            "custom_name"
-        )
-
-        if "history_selectbox" in st.session_state:
-            st.session_state.history_selectbox = "-- Select Past Run --"
-
-        status_container.empty()
-        st.success("Answers successfully written!")
-        return
+    _poll_generation_task(validated_task_id, returned_task_id, status_container)
 
 
 def send_audit_request(

@@ -124,6 +124,21 @@ class DocumentGenerator:
             "missing_information": validated_data.missing_information,
         }
 
+    def _aggregate_files(self, valid_workspace_files: list[Path]) -> list[str]:
+        aggregated_text_blocks = []
+        for file_path in valid_workspace_files:
+            try:
+                text_block = extract_text(file_path)
+                aggregated_text_blocks.append(
+                    f"--- SOURCE CONTENT ASSET: {file_path.name} ---\n{text_block}"
+                )
+            except (DocumentExtractionError, CorruptedDocumentError) as read_failure:
+                logger.error(
+                    f"Skipping file {file_path.name} because it could not "
+                    f"be read: {read_failure}"
+                )
+        return aggregated_text_blocks
+
     def generate_draft_from_directory(
         self, target_document_type: str, input_dir: Path | str
     ) -> ExtractionReport:
@@ -159,18 +174,7 @@ class DocumentGenerator:
                 "be read from any of the files"
             )
 
-        aggregated_text_blocks = []
-        for file_path in valid_workspace_files:
-            try:
-                text_block = extract_text(file_path)
-                aggregated_text_blocks.append(
-                    f"--- SOURCE CONTENT ASSET: {file_path.name} ---\n{text_block}"
-                )
-            except (DocumentExtractionError, CorruptedDocumentError) as read_failure:
-                logger.error(
-                    f"Skipping file {file_path.name} because it could not "
-                    f"be read: {read_failure}"
-                )
+        aggregated_text_blocks = self._aggregate_files(valid_workspace_files)
 
         if not aggregated_text_blocks:
             raise AgentExecutionError(

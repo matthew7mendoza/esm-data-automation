@@ -118,16 +118,16 @@ def _extract_context_cpu_worker(staging_path_str: str) -> str:
     )
 
 
-async def run_heavy_processing(
-    *, task_id: TaskId, target_doc: str, model_provider: str, staging_path: Path
-) -> None:
-    """Handles the long document reading and AI tasks."""
+async def _initialize_task_and_questions(
+    task_id: TaskId, target_doc: str
+) -> list[str] | None:
     async with async_session_creator() as session:
-        if not (task := await session.get(Task, task_id)):
+        task = await session.get(Task, task_id)
+        if not task:
             logger.error(
                 f"Aborting worker: tracking ticket context {task_id} not found"
             )
-            return
+            return None
 
         task.status = "PROCESSING"
         await session.commit()
@@ -139,15 +139,32 @@ async def run_heavy_processing(
             .order_by(col(TemplateQuestion.sort_order))
         )
         result = await session.exec(statement)
-        target_questions = [question.text for question in result.all()]
+        return [question.text for question in result.all()]
 
+
+async def _run_extraction_thread(
+    generator: DocumentGenerator, target_questions: list[str], context: str
+) -> ExtractionReport:
+    try:
+        return await asyncio.to_thread(
+            generator.execute_extraction, target_questions, context
+        )
+    except Exception as generation_error:
+        raise AgentExecutionError(
+            f"LLM generation failed: {generation_error}"
+        ) from generation_error
+
+
+async def _perform_document_extraction(
+    target_questions: list[str], model_provider: str, staging_path: Path
+) -> tuple[ExtractionReport | None, str, str | None]:
     error_detail: str | None = None
     report: ExtractionReport | None = None
     final_unified_context: str = ""
 
     try:
         if not target_questions:
-            raise ValueError(f"No fields found for data blueprint: '{target_doc}'")
+            raise ValueError("No fields found for data blueprint")
 
         loop = asyncio.get_running_loop()
         final_unified_context = await loop.run_in_executor(
@@ -156,15 +173,9 @@ async def run_heavy_processing(
 
         provider_instance = get_provider(name=model_provider)
         generator = DocumentGenerator(provider=provider_instance)
-
-        try:
-            report = await asyncio.to_thread(
-                generator.execute_extraction, target_questions, final_unified_context
-            )
-        except Exception as generation_error:
-            raise AgentExecutionError(
-                f"LLM generation failed: {generation_error}"
-            ) from generation_error
+        report = await _run_extraction_thread(
+            generator, target_questions, final_unified_context
+        )
 
     except (
         ValueError,
@@ -177,7 +188,6 @@ async def run_heavy_processing(
             f"Processing failed to application domain fault: {error_detail}",
             exc_info=True,
         )
-
     except Exception as unexpected_fault:
         error_detail = f"Unexpected failure: {unexpected_fault}"
         logger.error(
@@ -185,14 +195,19 @@ async def run_heavy_processing(
             f"{error_detail}",
             exc_info=True,
         )
+    return report, final_unified_context, error_detail
 
-    finally:
-        if staging_path.exists():
-            await asyncio.to_thread(shutil.rmtree, staging_path)
 
+async def _finalize_heavy_processing(
+    task_id: TaskId,
+    report: ExtractionReport | None,
+    final_unified_context: str,
+    error_detail: str | None,
+) -> None:
     try:
         async with async_session_creator() as session:
-            if not (task := await session.get(Task, task_id)):
+            task = await session.get(Task, task_id)
+            if not task:
                 logger.error(
                     "Failed to finalize processing job: "
                     f"tracking ticket {task_id} missing"
@@ -208,7 +223,6 @@ async def run_heavy_processing(
             task.status = "COMPLETED"
             task.report_json = json.dumps(report)
             task.source_context = final_unified_context
-
             await session.commit()
 
     except SQLAlchemyError as db_error:
@@ -217,6 +231,35 @@ async def run_heavy_processing(
             f"status: {db_error}",
             exc_info=True,
         )
+
+
+async def run_heavy_processing(
+    *, task_id: TaskId, target_doc: str, model_provider: str, staging_path: Path
+) -> None:
+    """Handles the long document reading and AI tasks."""
+    target_questions = await _initialize_task_and_questions(task_id, target_doc)
+    if target_questions is None:
+        return
+
+    report: ExtractionReport | None = None
+    final_unified_context: str = ""
+    error_detail: str | None = None
+
+    try:
+        (
+            report,
+            final_unified_context,
+            error_detail,
+        ) = await _perform_document_extraction(
+            target_questions, model_provider, staging_path
+        )
+    finally:
+        if staging_path.exists():
+            await asyncio.to_thread(shutil.rmtree, staging_path)
+
+    await _finalize_heavy_processing(
+        task_id, report, final_unified_context, error_detail
+    )
 
 
 @app.get("/api/templates")
@@ -231,6 +274,44 @@ async def get_templates(
     return [template.name for template in result.all()]
 
 
+async def _stage_single_file(uploaded_file: UploadFile, staging_path: Path) -> None:
+    if not uploaded_file.filename:
+        return
+    file_disk_path = staging_path / Path(uploaded_file.filename).name
+    try:
+        content = await uploaded_file.read()
+        await asyncio.to_thread(file_disk_path.write_bytes, content)
+    except OSError as io_error:
+        if staging_path.exists():
+            shutil.rmtree(staging_path)
+        logger.error(
+            "Disk write fault encountered during file staging loop", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Storage IO error while staging files...",
+        ) from io_error
+
+
+async def _register_new_task(
+    session: AsyncSession, task_id: TaskId, custom_name: str | None, staging_path: Path
+) -> None:
+    try:
+        new_task = Task(
+            task_id=task_id, status="PENDING", custom_name=custom_name
+        )
+        session.add(new_task)
+        await session.commit()
+    except SQLAlchemyError as db_error:
+        if staging_path.exists():
+            shutil.rmtree(staging_path)
+        logger.error("Database tracking error while performing task", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal database fail occured while processing task record",
+        ) from db_error
+
+
 @app.post("/api/generate", status_code=status.HTTP_202_ACCEPTED)
 async def generate_document(
     *,
@@ -242,7 +323,7 @@ async def generate_document(
     Saves input files to disk,
     logs new job in db w/ side-thread,
     fire up background processing
-    return tracking JSON reciept
+    return tracking JSON receipt
     """
 
     task_id = TaskId(str(uuid.uuid4()))
@@ -250,39 +331,9 @@ async def generate_document(
     task_staging_path.mkdir(parents=True, exist_ok=True)
 
     for uploaded_file in payload.files:
-        if not uploaded_file.filename:
-            continue
+        await _stage_single_file(uploaded_file, task_staging_path)
 
-        file_disk_path = task_staging_path / Path(uploaded_file.filename).name
-
-        try:
-            content = await uploaded_file.read()
-            await asyncio.to_thread(file_disk_path.write_bytes, content)
-        except OSError as io_error:
-            if task_staging_path.exists():
-                shutil.rmtree(task_staging_path)
-            logger.error(
-                "Disk write fault encountered during file staging loop", exc_info=True
-            )
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Storage IO error while staging files...",
-            ) from io_error
-
-    try:
-        new_task = Task(
-            task_id=task_id, status="PENDING", custom_name=payload.custom_name
-        )
-        session.add(new_task)
-        await session.commit()
-    except SQLAlchemyError as db_error:
-        if task_staging_path.exists():
-            shutil.rmtree(task_staging_path)
-        logger.error("Database tracking error while performing task", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal database fail occured while processing task record",
-        ) from db_error
+    await _register_new_task(session, task_id, payload.custom_name, task_staging_path)
 
     background_tasks.add_task(
         run_heavy_processing,
