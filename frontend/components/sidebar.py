@@ -15,28 +15,36 @@ logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 def _on_history_change() -> None:
     """
-    prevents ui from getting messy
-    by keeping track of what process is going on 
+    Handles transition of historical task selection to keep the UI clean.
     """
+    currently_selected_historical_run: str | None = st.session_state.get("history_selectbox")
+    if not currently_selected_historical_run:
+        return
 
-    selected_job_name: str | None = st.session_state.get("history_selectbox")
-    if not selected_job_name:
+    if currently_selected_historical_run == "-- Create New Run --":
+        active_view_session_keys: list[str] = [
+            "generator_report",
+            "source_context",
+            "audit_metrics",
+            "current_task_id",
+            "current_task_custom_name"
+        ]
+        for session_key_to_purge in active_view_session_keys:
+            st.session_state.pop(session_key_to_purge, None)
         return
-    if selected_job_name == "-- Select Past Run --":
-        return
-    
+
     task_id_mapping = st.session_state.get("task_mapping")
     if not isinstance(task_id_mapping, dict):
         return
-    
-    selected_job_data = task_id_mapping.get(selected_job_name)
+
+    selected_job_data = task_id_mapping.get(currently_selected_historical_run)
     if not isinstance(selected_job_data, dict):
         return
-    
+
     task_id: str | None = cast(str | None, selected_job_data.get("task_id"))
-    if not task_id: 
+    if not task_id:
         return
-    
+
     try:
         task_profile_response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
     except requests.exceptions.RequestException as network_transport_fault:
@@ -45,14 +53,14 @@ def _on_history_change() -> None:
             exc_info=True
         )
         st.error(
-            f"Netowkr error trying to fetch historical profile: {network_transport_fault}"
+            f"Network error trying to fetch historical profile: {network_transport_fault}"
         )
         return
-    
+
     if task_profile_response.status_code != 200:
         st.error("Failed to extract full analysis data from backend")
         return
-    
+
     job_details_payload: dict[str, object] = task_profile_response.json()
 
     st.session_state.current_task_id = task_id
@@ -69,71 +77,59 @@ def _on_history_change() -> None:
 
 def render_historical_sidebar() -> None:
     """
-    fetches the history of completed tasks and displays
-    them on the sidebar dropdown so users can scroll through past runs
+    Fetches the history of completed tasks and displays
+    them on the sidebar dropdown so users can scroll through past runs.
     """
-
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=5)
     except requests.exceptions.RequestException as connection_offline_error:
         logger.warning(f"Unable to read connection tracking indexes: {connection_offline_error}")
         st.sidebar.caption("History tracker offline!")
         return
-    
+
     if response.status_code != 200:
         st.sidebar.caption("History tracker offline!")
         return
-    
+
     past_tasks = response.json()
-    completed_tasks = [
+    completed_historical_tasks = [
         task for task in past_tasks if task.get("status") == "COMPLETED"
     ]
 
-    if not completed_tasks:
+    if not completed_historical_tasks:
         st.sidebar.caption("No history")
         return
-    
-    # maps display name to full task data
-    # uses the custom name if avaliable, otherwise defaults to 
-    # job [first 8 characters of ID]
-    task_options = {
+
+    # Maps display name to full task data
+    task_display_options_mapping = {
         (
             f"{task.get('custom_name')} ({task['task_id'][:8]})"
             if task.get("custom_name")
             else f"Job {task['task_id'][:8]}"
         ): task
-        for task in completed_tasks
+        for task in completed_historical_tasks
     }
 
-    st.session_state.task_mapping = task_options
-    options_list = ["-- Select Past Run --", *task_options]
+    st.session_state.task_mapping = task_display_options_mapping
+    available_selection_options_list = ["-- Create New Run --", *task_display_options_mapping]
 
-    current_task_id = st.session_state.get("current_task_id")
-    if current_task_id:
-        matching_option = next(
-            (opt for opt, task in task_options.items() if str(task["task_id"]) == str(current_task_id)),
+    currently_active_task_id = st.session_state.get("current_task_id")
+    if currently_active_task_id:
+        matching_selection_option_name = next(
+            (opt for opt, task in task_display_options_mapping.items() if str(task["task_id"]) == str(currently_active_task_id)),
             None
         )
-        if matching_option:
-            st.session_state.history_selectbox = matching_option
+        if matching_selection_option_name:
+            st.session_state.history_selectbox = matching_selection_option_name
+        else:
+            st.session_state.history_selectbox = "-- Create New Run --"
     else:
-        latest_task = completed_tasks[-1]
-        task_id = str(latest_task["task_id"])
-        st.session_state.current_task_id = task_id
-        st.session_state.generator_report = latest_task.get("report")
-        st.session_state.source_context = latest_task.get("source_context")
-        st.session_state.current_task_custom_name = latest_task.get("custom_name")
-
-        custom_name = latest_task.get("custom_name")
-        display_name = f"{custom_name} ({task_id[:8]})" if custom_name else f"Job {task_id[:8]}"
-        st.session_state.history_selectbox = display_name
+        st.session_state.history_selectbox = "-- Create New Run --"
 
     st.sidebar.selectbox(
         "Reload a past analysis:",
-        options=options_list,
+        options=available_selection_options_list,
         key="history_selectbox",
         on_change=_on_history_change,
         disabled=st.session_state.get("job_running", False),
     )
-
-    

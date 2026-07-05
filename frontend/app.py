@@ -118,20 +118,18 @@ def _purge_workspace_heap() -> None:
 
 def _render_workspace_cleaner() -> None:
     """
-    Render workspace cleaner control w/ gaurd rules
-    so basically the logic to decide when to make reset the UI 
-    to an original state
+    Renders workspace reset controls to start a fresh extraction run.
     """
-
-    has_active_view: bool = bool(
+    has_active_analysis_view: bool = bool(
         st.session_state.get("generator_report") 
         or st.session_state.get("audit_metrics")
     )
-    if not has_active_view:
+    if not has_active_analysis_view:
         return
     
-    if st.button("Streamlit Workspace Reset Button", type="secondary"):
+    if st.button("Create New Run", type="secondary"):
         _purge_workspace_heap()
+        st.session_state.history_selectbox = "-- Create New Run --"
         st.rerun()
     
 
@@ -343,7 +341,7 @@ def _render_judge_tab(
     *, disabled: bool, models: list[str]
 ) -> None:
     """
-    Renders the LLM Judge tab
+    Renders the LLM Judge tab using the globally selected active run.
     """
 
     st.header("LLM Judge: Evaluate Historical Extraction")
@@ -351,60 +349,34 @@ def _render_judge_tab(
 
     historical_tasks: list[dict[str, object]] = fetch_all_historical_tasks()
 
-    completed_tasks: list[dict[str, object]] = [
+    completed_historical_tasks_list: list[dict[str, object]] = [
         task for task in historical_tasks
         if task.get("status") == "COMPLETED" and task.get("report") is not None
     ]
 
-    if not completed_tasks:
-        st.info("No completed tasks found in database, create an extraction run first!")
+    if not completed_historical_tasks_list:
+        st.info("No completed tasks found in database. Create an extraction run first!")
         return
 
-    # Sync selection to the currently active task
-    current_task_id = st.session_state.get("current_task_id")
-    if not current_task_id:
-        current_task_id = str(completed_tasks[-1]["task_id"])
-        st.session_state.current_task_id = current_task_id
-    
-    # create dictionary mapping each complete tasks full ID to human readable dropdown label
-    # uses custom name, else fall back unnamed run with 8 char snippet
-    task_options: dict[str, str] = {
-        str(task["task_id"]): f"{task.get('custom_name') or 'Unnamed Run'} (ID: {str(task['task_id'])[:8]})"
-        for task in completed_tasks 
-    }
+    currently_selected_task_id: str | None = st.session_state.get("current_task_id")
 
-    options_keys = list(task_options.keys())
-    try:
-        default_index = options_keys.index(str(current_task_id))
-    except ValueError:
-        default_index = 0
+    if not currently_selected_task_id:
+        st.info("Please upload files under the 'Document Generator' tab or select a past run from the sidebar to evaluate.")
+        return
 
-    chosen_task_id: str = st.selectbox(
-        "Select a Run to Evaluate",
-        options=options_keys,
-        index=default_index,
-        format_func=lambda tid: task_options[tid],
-        disabled=disabled
+    # Find the corresponding task data for the currently selected task ID
+    currently_active_task_data = next(
+        (task for task in completed_historical_tasks_list if str(task["task_id"]) == str(currently_selected_task_id)),
+        None
     )
 
-    if chosen_task_id != current_task_id:
-        st.session_state.current_task_id = chosen_task_id
-        new_task = next(t for t in completed_tasks if str(t["task_id"]) == chosen_task_id)
-        st.session_state.generator_report = new_task.get("report")
-        st.session_state.source_context = new_task.get("source_context")
-        st.session_state.current_task_custom_name = new_task.get("custom_name")
+    if not currently_active_task_data:
+        st.warning("The selected run could not be found in the database. Please select another run from the sidebar.")
+        return
 
-        custom_name = new_task.get("custom_name")
-        display_name = f"{custom_name} ({chosen_task_id[:8]})" if custom_name else f"Job {chosen_task_id[:8]}"
-        st.session_state.history_selectbox = display_name
-
-        historical_audit_records = st.session_state.get("historical_audits")
-        if isinstance(historical_audit_records, dict):
-            st.session_state.audit_metrics = historical_audit_records.get(chosen_task_id)
-        else:
-            st.session_state.audit_metrics = None
-
-        st.rerun()
+    # Inform the user which run is currently active and under evaluation
+    active_run_custom_name = currently_active_task_data.get("custom_name") or "Unnamed Run"
+    st.success(f"Evaluating Active Run: **{active_run_custom_name}** (ID: `{str(currently_selected_task_id)[:8]}`)")
 
     chosen_engine: str = st.selectbox("Select Evaluating AI Judge", models, disabled=disabled)
 
@@ -416,21 +388,12 @@ def _render_judge_tab(
         disabled=disabled
     )
 
-    selected_task: dict[str, object] | None = next(
-        (task for task in completed_tasks if str(task["task_id"]) == chosen_task_id),
-        None
-    )
-
-    if selected_task:
-        st.markdown("#### Original Source Documents Under Review")
-        render_trust_audit_ledger(source_context=cast(str | None, selected_task.get("source_context")))
+    st.markdown("#### Original Source Documents Under Review")
+    render_trust_audit_ledger(source_context=cast(str | None, currently_active_task_data.get("source_context")))
 
     if st.button("Run Stability Test", type="primary", disabled=disabled):
-        if not selected_task:
-            return
-        
-        report_data = selected_task.get("report") or {}
-        extracted = (
+        report_data = currently_active_task_data.get("report") or {}
+        extracted_answers_dict = (
             report_data.get("extracted_answers", {})
             if isinstance(report_data, dict)
             else {}
@@ -439,11 +402,11 @@ def _render_judge_tab(
         st.session_state.job_running = True
         st.session_state.run_state = "triggered"
         st.session_state.pending_audit = {
-            "task_id": chosen_task_id,
+            "task_id": currently_selected_task_id,
             "chosen_engine": chosen_engine,
             "judge_iterations": judge_iterations,
-            "answers": extracted,
-            "source_context": selected_task.get("source_context", ""),
+            "answers": extracted_answers_dict,
+            "source_context": currently_active_task_data.get("source_context", ""),
         }
         st.rerun()
     

@@ -259,3 +259,7 @@ dist/
 # Local OS Specific Clutter
 .DS_Store
 Thumbs.db
+
+GEMINI.md
+**/GEMINI.md
+.GEMINI.md

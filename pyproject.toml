@@ -36,15 +36,19 @@ include = ["backend*", "frontend*"]
 [project.optional-dependencies]
 dev = [
     "mypy",
-    "pytest"
+    "pytest",
+    "ruff"
 ]
 
 [tool.mypy]
 python_version = "3.12"
+plugins = ["pydantic.mypy"]
+strict = true
+
+ignore_missing_imports = true
+
 warn_return_any = true
 warn_unused_configs = true
-ignore_missing_imports = true
-plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 minversion = "7.0"
@@ -53,3 +57,42 @@ testpaths = [
     "backend",
     "frontend"
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "W",    
+    "F",    
+    "UP",   
+    "I",    
+    "B",    
+    "SIM",  
+    "RET",  
+    "TID",  
+    "RUF",  
+    
+    "N",
+    "C90",
+    "ERA",
+    "ARG",
+    "PLC",
+    "PLW",
+]
+
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+
+[tool.ruff.format]
+quote-style = "double"
+
+indent-style = "space"
+
+skip-magic-trailing-comma = false
+
+line-ending = "auto"
