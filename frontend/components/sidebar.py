@@ -4,6 +4,7 @@ Handles historical states and user settings sidebar rendering
 
 import logging
 from typing import Final, cast
+
 import requests
 import streamlit as st
 
@@ -13,11 +14,14 @@ __all__ = ["render_historical_sidebar"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
+
 def _on_history_change() -> None:
     """
     Handles transition of historical task selection to keep the UI clean.
     """
-    currently_selected_historical_run: str | None = st.session_state.get("history_selectbox")
+    currently_selected_historical_run: str | None = st.session_state.get(
+        "history_selectbox"
+    )
     if not currently_selected_historical_run:
         return
 
@@ -27,7 +31,7 @@ def _on_history_change() -> None:
             "source_context",
             "audit_metrics",
             "current_task_id",
-            "current_task_custom_name"
+            "current_task_custom_name",
         ]
         for session_key_to_purge in active_view_session_keys:
             st.session_state.pop(session_key_to_purge, None)
@@ -46,14 +50,17 @@ def _on_history_change() -> None:
         return
 
     try:
-        task_profile_response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
+        task_profile_response = requests.get(
+            f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5
+        )
     except requests.exceptions.RequestException as network_transport_fault:
         logger.error(
             "Network communication loss when trying to read historical data.",
-            exc_info=True
+            exc_info=True,
         )
         st.error(
-            f"Network error trying to fetch historical profile: {network_transport_fault}"
+            "Network error trying to fetch historical profile: "
+            f"{network_transport_fault}"
         )
         return
 
@@ -75,6 +82,7 @@ def _on_history_change() -> None:
 
     st.session_state.audit_metrics = historical_audit_records.get(task_id)
 
+
 def render_historical_sidebar() -> None:
     """
     Fetches the history of completed tasks and displays
@@ -83,7 +91,9 @@ def render_historical_sidebar() -> None:
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=5)
     except requests.exceptions.RequestException as connection_offline_error:
-        logger.warning(f"Unable to read connection tracking indexes: {connection_offline_error}")
+        logger.warning(
+            f"Unable to read connection tracking indexes: {connection_offline_error}"
+        )
         st.sidebar.caption("History tracker offline!")
         return
 
@@ -111,13 +121,20 @@ def render_historical_sidebar() -> None:
     }
 
     st.session_state.task_mapping = task_display_options_mapping
-    available_selection_options_list = ["-- Create New Run --", *task_display_options_mapping]
+    available_selection_options_list = [
+        "-- Create New Run --",
+        *task_display_options_mapping,
+    ]
 
     currently_active_task_id = st.session_state.get("current_task_id")
     if currently_active_task_id:
         matching_selection_option_name = next(
-            (opt for opt, task in task_display_options_mapping.items() if str(task["task_id"]) == str(currently_active_task_id)),
-            None
+            (
+                opt
+                for opt, task in task_display_options_mapping.items()
+                if str(task["task_id"]) == str(currently_active_task_id)
+            ),
+            None,
         )
         if matching_selection_option_name:
             st.session_state.history_selectbox = matching_selection_option_name

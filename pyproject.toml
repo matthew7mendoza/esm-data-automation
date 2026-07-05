@@ -83,6 +83,18 @@ select = [
     "PLW",
 ]
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.params.Depends",
+    "fastapi.Query",
+    "fastapi.params.Query",
+    "fastapi.Form",
+    "fastapi.params.Form",
+    "fastapi.File",
+    "fastapi.params.File",
+]
+
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10

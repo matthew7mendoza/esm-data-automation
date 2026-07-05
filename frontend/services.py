@@ -1,5 +1,5 @@
 """
-Streamlit orchestration 
+Streamlit orchestration
 """
 
 import time
@@ -13,7 +13,8 @@ from frontend.api import get_task_profile
 from frontend.config import BACKEND_URL, MODEL_CONFIGURATIONS
 from frontend.protocols import UploadedFileProtocol
 
-__all__ = ["send_generation_request", "send_audit_request"]
+__all__ = ["send_audit_request", "send_generation_request"]
+
 
 def send_generation_request(
     *,
@@ -48,35 +49,41 @@ def send_generation_request(
     except requests.exceptions.RequestException as network_error:
         st.error(f"Could not reach background API layer... Error: {network_error}")
         return
-    
+
     if generation_response.status_code not in (200, 202):
-        st.error(f"Backend processing failure: {generation_response.json().get('detail')}")
+        st.error(
+            f"Backend processing failure: {generation_response.json().get('detail')}"
+        )
         return
-    
+
     returned_task_id = generation_response.json().get("task_id", "")
     if not returned_task_id:
         st.error("Invalid task response from processing node.")
         return
-    
+
     validated_task_id = TaskId(returned_task_id)
     status_container = st.empty()
 
     for _ in range(450):
-        status_container.info("AI is analyzing file and compiling documentation... Please wait...")
+        status_container.info(
+            "AI is analyzing file and compiling documentation... Please wait..."
+        )
         current_task_profile = get_task_profile(task_id=validated_task_id)
 
         if not current_task_profile:
             status_container.empty()
             st.error("Lost communication tracking link with backend processing!")
             return
-        
+
         current_task_status = current_task_profile.get("status")
 
         if current_task_status == "FAILED":
             status_container.empty()
-            st.error(f"Processing routine crashed: {current_task_profile.get('detail')}")
+            st.error(
+                f"Processing routine crashed: {current_task_profile.get('detail')}"
+            )
             return
-        
+
         if current_task_status != "COMPLETED":
             time.sleep(2)
             continue
@@ -84,7 +91,9 @@ def send_generation_request(
         st.session_state.generator_report = current_task_profile.get("report")
         st.session_state.source_context = current_task_profile.get("source_context")
         st.session_state.current_task_id = returned_task_id
-        st.session_state.current_task_custom_name = current_task_profile.get("custom_name")
+        st.session_state.current_task_custom_name = current_task_profile.get(
+            "custom_name"
+        )
 
         if "history_selectbox" in st.session_state:
             st.session_state.history_selectbox = "-- Select Past Run --"
@@ -92,13 +101,14 @@ def send_generation_request(
         status_container.empty()
         st.success("Answers successfully written!")
         return
-    
+
+
 def send_audit_request(
     *,
     chosen_engine: str,
     answers: dict[str, str],
     judge_iterations: int,
-    source_context: str
+    source_context: str,
 ) -> dict[str, object] | None:
     """
     Sends the generated answers to an AI judge to evaluate how consistent they are
@@ -110,25 +120,23 @@ def send_audit_request(
         "iterations": judge_iterations,
     }
 
-    parameters = {
-        "model_provider": MODEL_CONFIGURATIONS[chosen_engine]
-    }
+    parameters = {"model_provider": MODEL_CONFIGURATIONS[chosen_engine]}
 
     try:
         audit_response = requests.post(
             f"{BACKEND_URL}/api/audit",
             json=audit_payload,
             params=parameters,
-            timeout=120
+            timeout=120,
         )
     except requests.exceptions.RequestException as network_error:
         st.error(f"Communication loss with audit server: {network_error}")
         return None
-    
+
     if audit_response.status_code != 200:
         st.error(f"Audit server error: {audit_response.json().get('detail')}")
         return None
-    
+
     metrics = cast(dict[str, object], audit_response.json())
     st.session_state.audit_metrics = metrics
 

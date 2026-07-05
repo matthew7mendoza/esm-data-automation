@@ -1,18 +1,21 @@
 from unittest.mock import MagicMock, patch
+
 import requests
-import pytest
+
 from frontend.services import send_audit_request, send_generation_request
 
-class TestFrontendServices:
 
+class TestFrontendServices:
     @patch("frontend.services.st")
     @patch("frontend.services.requests.post")
-    def test_send_audit_request_success_flow(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
+    def test_send_audit_request_success_flow(
+        self, mock_post: MagicMock, mock_st: MagicMock
+    ) -> None:
         mock_response: MagicMock = MagicMock()
         mock_response.status_code = 200
         fake_metrics: dict[str, object] = {
             "metadata": {"global_gwets_ac1": 0.95},
-            "item_level_stability_metrics": []
+            "item_level_stability_metrics": [],
         }
         mock_response.json.return_value = fake_metrics
         mock_post.return_value = mock_response
@@ -23,7 +26,7 @@ class TestFrontendServices:
             chosen_engine="Gemini",
             answers={"Q1": "Yes"},
             judge_iterations=3,
-            source_context="Mock Context"
+            source_context="Mock Context",
         )
 
         assert result == fake_metrics
@@ -32,17 +35,16 @@ class TestFrontendServices:
 
     @patch("frontend.services.st")
     @patch("frontend.services.requests.post")
-    def test_send_audit_request_handles_server_rejection(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
+    def test_send_audit_request_handles_server_rejection(
+        self, mock_post: MagicMock, mock_st: MagicMock
+    ) -> None:
         mock_response: MagicMock = MagicMock()
         mock_response.status_code = 422
         mock_response.json.return_value = {"detail": "Validation Error"}
         mock_post.return_value = mock_response
 
         result: dict[str, object] | None = send_audit_request(
-            chosen_engine="Gemini",
-            answers={},
-            judge_iterations=2,
-            source_context=""
+            chosen_engine="Gemini", answers={}, judge_iterations=2, source_context=""
         )
 
         assert result is None
@@ -50,14 +52,13 @@ class TestFrontendServices:
 
     @patch("frontend.services.st")
     @patch("frontend.services.requests.post")
-    def test_send_audit_request_network_error(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
+    def test_send_audit_request_network_error(
+        self, mock_post: MagicMock, mock_st: MagicMock
+    ) -> None:
         mock_post.side_effect = requests.exceptions.Timeout("Timeout")
 
         result: dict[str, object] | None = send_audit_request(
-            chosen_engine="Gemini",
-            answers={},
-            judge_iterations=2,
-            source_context=""
+            chosen_engine="Gemini", answers={}, judge_iterations=2, source_context=""
         )
 
         assert result is None
@@ -72,7 +73,7 @@ class TestFrontendServices:
         mock_post: MagicMock,
         mock_st: MagicMock,
         mock_get_profile: MagicMock,
-        mock_sleep: MagicMock,
+        _mock_sleep: MagicMock,
     ) -> None:
         mock_response: MagicMock = MagicMock()
         mock_response.status_code = 202
@@ -84,7 +85,12 @@ class TestFrontendServices:
 
         mock_get_profile.side_effect = [
             {"status": "PENDING"},
-            {"status": "COMPLETED", "report": "some_report", "source_context": "some_context", "custom_name": "MyTest"}
+            {
+                "status": "COMPLETED",
+                "report": "some_report",
+                "source_context": "some_context",
+                "custom_name": "MyTest",
+            },
         ]
 
         mock_file: MagicMock = MagicMock()
@@ -96,7 +102,7 @@ class TestFrontendServices:
             target_document="DMP",
             chosen_engine="Gemini",
             uploaded_files=[mock_file],
-            custom_name="MyTest"
+            custom_name="MyTest",
         )
 
         mock_st.success.assert_called_with("Answers successfully written!")
@@ -105,7 +111,9 @@ class TestFrontendServices:
 
     @patch("frontend.services.st")
     @patch("frontend.services.requests.post")
-    def test_send_generation_request_network_error(self, mock_post: MagicMock, mock_st: MagicMock) -> None:
+    def test_send_generation_request_network_error(
+        self, mock_post: MagicMock, mock_st: MagicMock
+    ) -> None:
         mock_post.side_effect = requests.exceptions.ConnectionError("Connection fail")
 
         mock_file: MagicMock = MagicMock()
@@ -119,4 +127,6 @@ class TestFrontendServices:
             uploaded_files=[mock_file],
         )
 
-        mock_st.error.assert_called_with("Could not reach background API layer... Error: Connection fail")
+        mock_st.error.assert_called_with(
+            "Could not reach background API layer... Error: Connection fail"
+        )

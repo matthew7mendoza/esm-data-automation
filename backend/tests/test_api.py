@@ -1,10 +1,15 @@
+import asyncio
+
 from fastapi.testclient import TestClient
+
 from backend.api import app
+from backend.esm_data.database import async_session_creator
+from backend.esm_data.db_models import Task
 
 client: TestClient = TestClient(app)
 
-class TestFastAPIEndpoints:
 
+class TestFastAPIEndpoints:
     def test_get_templates(self) -> None:
         response = client.get("/api/templates")
         assert response.status_code == 200
@@ -30,25 +35,20 @@ class TestFastAPIEndpoints:
     def test_patch_task_report_not_found(self) -> None:
         response = client.patch(
             "/api/tasks/nonexistent-id-abc/report",
-            json={"extracted_answers": {}, "missing_information": []}
+            json={"extracted_answers": {}, "missing_information": []},
         )
         assert response.status_code == 404
         assert response.json()["detail"] == "The requested job does not exist."
 
     def test_patch_task_report_invalid_payload(self) -> None:
         response = client.patch(
-            "/api/tasks/some-id/report",
-            json={"extracted_answers": "invalid_type"}
+            "/api/tasks/some-id/report", json={"extracted_answers": "invalid_type"}
         )
         assert response.status_code == 422
 
     def test_patch_task_report_success(self) -> None:
-        import asyncio
-        from backend.esm_data.database import async_session_creator
-        from backend.esm_data.db_models import Task
-
         task_id = "test-task-patch-id"
-        
+
         async def create_test_task() -> None:
             async with async_session_creator() as session:
                 # First delete if it exists from previous dirty runs
@@ -56,21 +56,25 @@ class TestFastAPIEndpoints:
                 if existing:
                     await session.delete(existing)
                     await session.commit()
-                task = Task(task_id=task_id, status="COMPLETED", report_json='{"extracted_answers": {"Q1": "A1"}, "missing_information": []}')
+                task = Task(
+                    task_id=task_id,
+                    status="COMPLETED",
+                    report_json=(
+                        '{"extracted_answers": {"Q1": "A1"}, '
+                        '"missing_information": []}'
+                    ),
+                )
                 session.add(task)
                 await session.commit()
-                
+
         asyncio.run(create_test_task())
 
         # Now patch the task
         update_payload = {
             "extracted_answers": {"Q1": "Updated A1", "Q2": "New Answer"},
-            "missing_information": ["Q3"]
+            "missing_information": ["Q3"],
         }
-        response = client.patch(
-            f"/api/tasks/{task_id}/report",
-            json=update_payload
-        )
+        response = client.patch(f"/api/tasks/{task_id}/report", json=update_payload)
         assert response.status_code == 200
         assert response.json()["status"] == "SUCCESS"
 
@@ -78,7 +82,10 @@ class TestFastAPIEndpoints:
         status_response = client.get(f"/api/tasks/{task_id}")
         assert status_response.status_code == 200
         data = status_response.json()
-        assert data["report"]["extracted_answers"] == {"Q1": "Updated A1", "Q2": "New Answer"}
+        assert data["report"]["extracted_answers"] == {
+            "Q1": "Updated A1",
+            "Q2": "New Answer",
+        }
         assert data["report"]["missing_information"] == ["Q3"]
 
         async def delete_test_task() -> None:
@@ -89,4 +96,3 @@ class TestFastAPIEndpoints:
                     await session.commit()
 
         asyncio.run(delete_test_task())
-

@@ -1,8 +1,9 @@
 from unittest.mock import MagicMock, patch
+
 from streamlit.testing.v1 import AppTest
 
-class TestStreamlitAppIntegration:
 
+class TestStreamlitAppIntegration:
     @patch("frontend.app.fetch_server_templates")
     @patch("frontend.app.fetch_all_historical_tasks")
     @patch("frontend.components.sidebar.requests.get")

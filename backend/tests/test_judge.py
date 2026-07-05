@@ -19,7 +19,7 @@ def test_llm_judge_initialization() -> None:
 def test_llm_judge_handles_api_error_gracefully() -> None:
     """Test that google.genai.errors.APIError is caught in _evaluate_single_node."""
     provider: MagicMock = MagicMock(spec=LLMProvider)
-    
+
     # We mock generate_structured_async to raise google.genai.errors.APIError
     api_error = google.genai.errors.APIError(
         code=429,
@@ -52,7 +52,7 @@ def test_llm_judge_handles_api_error_gracefully() -> None:
 def test_llm_judge_handles_openai_error_gracefully() -> None:
     """Test that openai.OpenAIError is caught in _evaluate_single_node."""
     provider: MagicMock = MagicMock(spec=LLMProvider)
-    
+
     # We mock generate_structured_async to raise openai.OpenAIError
     openai_error = openai.OpenAIError("Simulated OpenAI API Error")
     provider.generate_structured_async = AsyncMock(side_effect=openai_error)

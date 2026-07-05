@@ -2,39 +2,42 @@
 This file defines the standard data structures, rules, and custom errors
 """
 
-from typing import Literal, TypedDict, NewType
+from typing import Literal, NewType, TypedDict
+
 from pydantic import BaseModel, ConfigDict, Field
 
-#namespace
+# namespace
 __all__ = [
-    "SpearAutomationError",
-    "DocumentExtractionError",
-    "CorruptedDocumentError",
     "AgentConfigurationError",
     "AgentExecutionError",
-    "RubricItemConfig",
-    "NoveltyEntrySchema",
-    "ComplianceScoringSchema",
-    "ComplianceCategoryGroup",
-    "MasterAuditPayloadSchema",
     "AnswerPair",
-    "FormResponses",
-    "ExtractionReport",
-    "TaskStatusResponse",
     "AuditRequest",
-    "TemplateCreateRequest",
+    "ComplianceCategoryGroup",
+    "ComplianceScoringSchema",
+    "CorruptedDocumentError",
+    "DocumentExtractionError",
+    "ExtractionReport",
+    "FormResponses",
+    "MasterAuditPayloadSchema",
+    "NoveltyEntrySchema",
+    "RubricItemConfig",
+    "SpearAutomationError",
     "TaskReportUpdateRequest",
+    "TaskStatusResponse",
+    "TemplateCreateRequest",
 ]
 
 TaskId = NewType("TaskId", str)
 ItemId = NewType("ItemId", str)
 TemplateName = NewType("TemplateName", str)
 
+
 # ----------Error Boundaries----------------
 class SpearAutomationError(Exception):
     """
     Base exception for all errors within SPEAR automation project.
     """
+
     pass
 
 
@@ -42,25 +45,33 @@ class DocumentExtractionError(SpearAutomationError):
     """
     Base exception for all document extraction failures.
     """
+
     pass
+
 
 class CorruptedDocumentError(DocumentExtractionError):
     """
     Raised when the file exists but MarkItDown fails to read data
     """
+
     pass
+
 
 class AgentConfigurationError(SpearAutomationError):
     """
     Raised when the agent lacks required credentials or configuration.
     """
+
     pass
+
 
 class AgentExecutionError(SpearAutomationError):
     """
     Raised when the LLM fails to generate or return valid data.
     """
+
     pass
+
 
 # ---------Pydantic Schemas-----------
 class RubricItemConfig(BaseModel):
@@ -71,37 +82,88 @@ class RubricItemConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    id: str = Field(..., description="The unique identifier for the question (for example, '1.1', or '2.A').")
-    question: str = Field(..., description="The question text that the AI needs to check for accuracy.")
-    strategy: Literal["Numeric", "Quote", "Assertion"] = Field(..., description="The method the AI should use to look for the answer (looking for a number, a direct quote, or a general fact).")
+    id: str = Field(
+        ...,
+        description=(
+            "The unique identifier for the question "
+            "(for example, '1.1', or '2.A')."
+        ),
+    )
+    question: str = Field(
+        ..., description="The question text that the AI needs to check for accuracy."
+    )
+    strategy: Literal["Numeric", "Quote", "Assertion"] = Field(
+        ...,
+        description=(
+            "The method the AI should use to look for the answer "
+            "(looking for a number, a direct quote, or a general fact)."
+        ),
+    )
+
 
 class NoveltyEntrySchema(BaseModel):
     """
-    Stores the quality scores for how unqiue and useful the 
+    Stores the quality scores for how unqiue and useful the
     AI-generated statement is.
     """
 
     model_config = ConfigDict(frozen=True)
 
     relevance: Literal[0, 1] = Field(
-        ..., description="Indicates if the statement is relevant (1) or not (0). If this is 0, all the other sub-scores must be 0."
+        ...,
+        description=(
+            "Indicates if the statement is relevant (1) or not (0). "
+            "If this is 0, all the other sub-scores must be 0."
+        ),
     )
-    originality: int = Field(..., ge=0, le=3, description="The score for originality, from 0 (lowest) to 3 (highest).")
-    gap_addressing: int = Field(..., ge=0, le=3, description="The score for how well it solves an unanswered problem, from 0 to 3")
-    non_obviousness: int = Field(..., ge=0, le=3, description="The score for how unique or unexpected the idea is, from 0 to 3.")
+    originality: int = Field(
+        ...,
+        ge=0,
+        le=3,
+        description="The score for originality, from 0 (lowest) to 3 (highest).",
+    )
+    gap_addressing: int = Field(
+        ...,
+        ge=0,
+        le=3,
+        description=(
+            "The score for how well it solves an unanswered problem, "
+            "from 0 to 3"
+        ),
+    )
+    non_obviousness: int = Field(
+        ...,
+        ge=0,
+        le=3,
+        description="The score for how unique or unexpected the idea is, from 0 to 3.",
+    )
+
 
 class ComplianceScoringSchema(BaseModel):
     """
-    Tracks the AI's grading results and text explanations 
+    Tracks the AI's grading results and text explanations
     for a single question
     """
 
     model_config = ConfigDict(frozen=True)
 
-    item_id: str = Field(..., description="The unique identifier for the question being checked.")
-    question: str = Field(..., description="The text of the question that was being evaluated.")
-    justification: str = Field(..., description="The explanation written by the AI Judge justifying its final grade.")
-    answer: Literal["Yes", "No"] = Field(..., description="The final answer, must be a strict 'Yes' or 'No'.")
+    item_id: str = Field(
+        ..., description="The unique identifier for the question being checked."
+    )
+    question: str = Field(
+        ..., description="The text of the question that was being evaluated."
+    )
+    justification: str = Field(
+        ...,
+        description=(
+            "The explanation written by the AI Judge justifying its "
+            "final grade."
+        ),
+    )
+    answer: Literal["Yes", "No"] = Field(
+        ..., description="The final answer, must be a strict 'Yes' or 'No'."
+    )
+
 
 class ComplianceCategoryGroup(BaseModel):
     """
@@ -113,6 +175,7 @@ class ComplianceCategoryGroup(BaseModel):
     category_name: str
     items: list[ComplianceScoringSchema]
 
+
 class MasterAuditPayloadSchema(BaseModel):
     """
     Validation container for multiple LLM evaluation loops.
@@ -123,6 +186,7 @@ class MasterAuditPayloadSchema(BaseModel):
 
     categories: list[ComplianceCategoryGroup]
 
+
 class AnswerPair(BaseModel):
     """
     Maps a single form question with the answer the AI found for it
@@ -131,7 +195,10 @@ class AnswerPair(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     question: str = Field(..., description="The exact form question.")
-    answer: str = Field(..., description="The answer text that was extracted from the source documents.")
+    answer: str = Field(
+        ..., description="The answer text that was extracted from the source documents."
+    )
+
 
 class FormResponses(BaseModel):
     """
@@ -140,13 +207,17 @@ class FormResponses(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-
     extracted_answers: list[AnswerPair] = Field(
         ..., description="List mapping form questions to extracted answers."
     )
     missing_information: list[str] = Field(
-        ..., description="Questions that could not be verified or answered using the source documents."
+        ...,
+        description=(
+            "Questions that could not be verified or answered using the "
+            "source documents."
+        ),
     )
+
 
 class ExtractionReport(TypedDict):
     """
@@ -155,6 +226,7 @@ class ExtractionReport(TypedDict):
 
     extracted_answers: dict[str, str]
     missing_information: list[str]
+
 
 class TaskStatusResponse(BaseModel):
     """
@@ -170,6 +242,7 @@ class TaskStatusResponse(BaseModel):
     source_context: str | None = None
     detail: str | None = None
 
+
 class AuditRequest(BaseModel):
     """
     Pydantic schema handle input validation for JSON endpoints
@@ -177,10 +250,10 @@ class AuditRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-
     source_context: str
     answers: dict[str, str]
     iterations: int = 3
+
 
 class TemplateCreateRequest(BaseModel):
     """
@@ -190,8 +263,12 @@ class TemplateCreateRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    name: str = Field(..., description="The unique name of the document form (e.g., 'DOI').")
-    description: str | None = Field(None, description="Optional high-level technical description.")
+    name: str = Field(
+        ..., description="The unique name of the document form (e.g., 'DOI')."
+    )
+    description: str | None = Field(
+        None, description="Optional high-level technical description."
+    )
     questions: list[str] = Field(..., description="Ordered list of questions")
 
 
@@ -202,7 +279,9 @@ class TaskReportUpdateRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    extracted_answers: dict[str, str] = Field(..., description="Map of questions to their edited answers.")
-    missing_information: list[str] = Field(..., description="List of unanswered or missing questions.")
-
-
+    extracted_answers: dict[str, str] = Field(
+        ..., description="Map of questions to their edited answers."
+    )
+    missing_information: list[str] = Field(
+        ..., description="List of unanswered or missing questions."
+    )

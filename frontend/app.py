@@ -4,15 +4,15 @@ Primary streamlit rendering
 
 import io
 import logging
-from typing import Final, cast
+from typing import Any, Final, cast
 
-from docx import Document
 import streamlit as st
+from docx import Document
 
-from frontend.api import fetch_server_templates, fetch_all_historical_tasks
+from frontend.api import fetch_all_historical_tasks, fetch_server_templates
 from frontend.components.results import (
     render_answers_and_missing_sections,
-    render_trust_audit_ledger
+    render_trust_audit_ledger,
 )
 from frontend.components.sidebar import render_historical_sidebar
 from frontend.config import MODEL_CONFIGURATIONS
@@ -23,12 +23,13 @@ __all__ = ["main"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
+
 def _initialize_session_state() -> None:
     """
     Set up core streamlit session with explicit mutation
     """
 
-    defaults: dict[str, bool | dict | str | None] = {
+    defaults: dict[str, bool | dict[str, Any] | str | None] = {
         "generator_report": None,
         "source_context": None,
         "audit_metrics": None,
@@ -36,46 +37,54 @@ def _initialize_session_state() -> None:
         "current_task_id": None,
         "current_task_custom_name": None,
         "historical_audits": {},
-        "run_state": "idle"
+        "run_state": "idle",
     }
 
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
+
 def _process_pending_jobs() -> None:
     """
-    Executes queded background tasks 
+    Executes queded background tasks
     then refreshes the app
     """
 
     if not st.session_state.get("job_running"):
         return
-    
+
     run_state = st.session_state.get("run_state", "idle")
     if run_state == "triggered":
-        # Transition from triggered to executing. Do not execute the blocking request yet.
-        # This allows Streamlit to finish rendering the current page, which will disable all buttons in the browser.
+        # Transition from triggered to executing. Do not execute the
+        # blocking request yet. This allows Streamlit to finish rendering
+        # the current page, which will disable all buttons in the browser.
         st.session_state.run_state = "executing"
         return
 
     if run_state == "executing":
-        # Transition from executing to idle, and now execute the actual blocking job.
-        # The browser is already showing the disabled UI, so the user cannot double-click.
+        # Transition from executing to idle, and now execute the actual
+        # blocking job. The browser is already showing the disabled UI,
+        # so the user cannot double-click.
         st.session_state.run_state = "idle"
 
         if "pending_generation" in st.session_state:
             generation_args = st.session_state.pop("pending_generation")
             if isinstance(generation_args, dict):
                 send_generation_request(
-                    target_document=cast(str, generation_args.get("target_document", "")),
+                    target_document=cast(
+                        str, generation_args.get("target_document", "")
+                    ),
                     chosen_engine=cast(str, generation_args.get("chosen_engine", "")),
-                    uploaded_files=cast(list[UploadedFileProtocol], generation_args.get("uploaded_files", [])),
-                    custom_name=cast(str, generation_args.get("custom_name", ""))
+                    uploaded_files=cast(
+                        list[UploadedFileProtocol],
+                        generation_args.get("uploaded_files", []),
+                    ),
+                    custom_name=cast(str, generation_args.get("custom_name", "")),
                 )
             st.session_state.job_running = False
             st.rerun()
             return
-        
+
         if "pending_audit" in st.session_state:
             audit_args = st.session_state.pop("pending_audit")
             if isinstance(audit_args, dict):
@@ -84,7 +93,7 @@ def _process_pending_jobs() -> None:
                     chosen_engine=cast(str, audit_args.get("chosen_engine", "")),
                     answers=cast(dict[str, str], audit_args.get("answers", {})),
                     judge_iterations=cast(int, audit_args.get("judge_iterations", 3)),
-                    source_context=cast(str, audit_args.get("source_context", ""))
+                    source_context=cast(str, audit_args.get("source_context", "")),
                 )
                 if metrics:
                     st.session_state.audit_metrics = metrics
@@ -98,11 +107,11 @@ def _process_pending_jobs() -> None:
             st.session_state.job_running = False
             st.rerun()
             return
-    
-    
+
+
 def _purge_workspace_heap() -> None:
     """
-    Removes active tracking keys to reset the UI 
+    Removes active tracking keys to reset the UI
     to baseline so things don't get messy
     """
 
@@ -111,33 +120,31 @@ def _purge_workspace_heap() -> None:
         "source_context",
         "audit_metrics",
         "current_task_id",
-        "current_task_custom_name"
+        "current_task_custom_name",
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
+
 
 def _render_workspace_cleaner() -> None:
     """
     Renders workspace reset controls to start a fresh extraction run.
     """
     has_active_analysis_view: bool = bool(
-        st.session_state.get("generator_report") 
+        st.session_state.get("generator_report")
         or st.session_state.get("audit_metrics")
     )
     if not has_active_analysis_view:
         return
-    
+
     if st.button("Create New Run", type="secondary"):
         _purge_workspace_heap()
         st.session_state.history_selectbox = "-- Create New Run --"
         st.rerun()
-    
+
 
 def _render_step_one_upload(
-    *, 
-    disabled: bool,
-    templates: list[str],
-    models: list[str]
+    *, disabled: bool, templates: list[str], models: list[str]
 ) -> str:
     """
     Renders the sidebar settings and step 1 upload form
@@ -146,8 +153,8 @@ def _render_step_one_upload(
     st.sidebar.header("Settings")
 
     chosen_engine: str = st.sidebar.selectbox(
-        "Select AI Model", 
-        models, 
+        "Select AI Model",
+        models,
         disabled=disabled,
     )
 
@@ -168,25 +175,28 @@ def _render_step_one_upload(
     custom_name: str = st.text_input(
         "Label this extraction run (optional):",
         placeholder="Project #1",
-        disabled=disabled
+        disabled=disabled,
     )
 
-    if st.button("Read Files & Write Answers", type="primary", disabled=not uploaded_files or disabled):
+    if st.button(
+        "Read Files & Write Answers",
+        type="primary",
+        disabled=not uploaded_files or disabled,
+    ):
         st.session_state.job_running = True
         st.session_state.run_state = "triggered"
         st.session_state.pending_generation = {
             "target_document": target_document,
             "chosen_engine": chosen_engine,
             "uploaded_files": uploaded_files,
-            "custom_name": custom_name
+            "custom_name": custom_name,
         }
         st.rerun()
     return target_document
 
+
 def _build_final_document_string(
-    *,
-    extracted_answers: dict[str, str],
-    missing_questions: list[str]
+    *, extracted_answers: dict[str, str], missing_questions: list[str]
 ) -> str:
     """
     Aggregates text chunks
@@ -196,7 +206,7 @@ def _build_final_document_string(
 
     for question_text, answer_text in extracted_answers.items():
         document_blocks.append(f"### {question_text}\n{answer_text}\n\n")
-    
+
     for question_text in missing_questions:
         if question_text not in extracted_answers:
             document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
@@ -205,9 +215,7 @@ def _build_final_document_string(
 
 
 def _create_docx_buffer(
-    *,
-    extracted_answers: dict[str, str],
-    missing_questions: list[str]
+    *, extracted_answers: dict[str, str], missing_questions: list[str]
 ) -> bytes:
     """
     Generates a Microsoft Word (.docx) document in memory and returns bytes.
@@ -219,7 +227,7 @@ def _create_docx_buffer(
     for question_text, answer_text in extracted_answers.items():
         doc.add_heading(question_text, level=2)
         doc.add_paragraph(answer_text)
-    
+
     for question_text in missing_questions:
         if question_text not in extracted_answers:
             doc.add_heading(question_text, level=2)
@@ -236,7 +244,7 @@ def _render_step_three_download(
     target_document: str,
     extracted: dict[str, str],
     missing: list[str],
-    disabled: bool
+    disabled: bool,
 ) -> None:
     """
     Provides the final aggregated document for download
@@ -248,7 +256,7 @@ def _render_step_three_download(
         "Choose Download Format",
         options=["Markdown (.md)", "Microsoft Word (.docx)"],
         horizontal=True,
-        disabled=disabled
+        disabled=disabled,
     )
 
     base_name = f"{target_document}_completed"
@@ -261,8 +269,7 @@ def _render_step_three_download(
 
     if download_format == "Markdown (.md)":
         final_markdown: str = _build_final_document_string(
-            extracted_answers=extracted,
-            missing_questions=missing
+            extracted_answers=extracted, missing_questions=missing
         )
         st.download_button(
             label="Download Document (.md)",
@@ -270,12 +277,11 @@ def _render_step_three_download(
             file_name=f"{base_name}.md",
             mime="text/markdown",
             type="primary",
-            disabled=disabled
+            disabled=disabled,
         )
     else:
         final_docx: bytes = _create_docx_buffer(
-            extracted_answers=extracted,
-            missing_questions=missing
+            extracted_answers=extracted, missing_questions=missing
         )
         st.download_button(
             label="Download Document (.docx)",
@@ -283,17 +289,15 @@ def _render_step_three_download(
             file_name=f"{base_name}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             type="primary",
-            disabled=disabled
+            disabled=disabled,
         )
 
+
 def _render_generator_tab(
-    *,
-    is_running: bool,
-    templates: list[str],
-    models: list[str]
+    *, is_running: bool, templates: list[str], models: list[str]
 ) -> None:
     """
-    Renders document filling process, 
+    Renders document filling process,
     the three step process
     """
 
@@ -302,11 +306,11 @@ def _render_generator_tab(
         templates=templates,
         models=models,
     )
-    
-    report: dict | None = st.session_state.get("generator_report")
+
+    report: dict[str, Any] | None = st.session_state.get("generator_report")
     if not report:
         return
-    
+
     render_answers_and_missing_sections(disabled=is_running)
     st.markdown("---")
 
@@ -317,40 +321,42 @@ def _render_generator_tab(
         target_document=target_document,
         extracted=extracted_answers,
         missing=missing_question,
-        disabled=is_running
+        disabled=is_running,
     )
 
-    audit_metrics: dict | None = st.session_state.get("audit_metrics")
+    audit_metrics: dict[str, Any] | None = st.session_state.get("audit_metrics")
     if not audit_metrics:
         return
-    
+
     st.markdown("---")
     st.subheader("Complete run snapshot")
-    metadata: dict = audit_metrics.get("metadata", {})
+    metadata: dict[str, Any] = audit_metrics.get("metadata", {})
     kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
         "global_gwets_ac1", 0.0
     )
 
     st.metric("Agreement score (Gwet's AC1)", f"{float(kappa_score):.3f}")
     st.dataframe(
-        audit_metrics.get("item_level_stability_metrics", []),
-        use_container_width=True
+        audit_metrics.get("item_level_stability_metrics", []), use_container_width=True
     )
 
-def _render_judge_tab(
-    *, disabled: bool, models: list[str]
-) -> None:
+
+def _render_judge_tab(*, disabled: bool, models: list[str]) -> None:
     """
     Renders the LLM Judge tab using the globally selected active run.
     """
 
     st.header("LLM Judge: Evaluate Historical Extraction")
-    st.markdown("Quantify the extraction accuracy of a past run against its original source context.")
+    st.markdown(
+        "Quantify the extraction accuracy of a past run against its "
+        "original source context."
+    )
 
     historical_tasks: list[dict[str, object]] = fetch_all_historical_tasks()
 
     completed_historical_tasks_list: list[dict[str, object]] = [
-        task for task in historical_tasks
+        task
+        for task in historical_tasks
         if task.get("status") == "COMPLETED" and task.get("report") is not None
     ]
 
@@ -361,35 +367,56 @@ def _render_judge_tab(
     currently_selected_task_id: str | None = st.session_state.get("current_task_id")
 
     if not currently_selected_task_id:
-        st.info("Please upload files under the 'Document Generator' tab or select a past run from the sidebar to evaluate.")
+        st.info(
+            "Please upload files under the 'Document Generator' tab or "
+            "select a past run from the sidebar to evaluate."
+        )
         return
 
     # Find the corresponding task data for the currently selected task ID
     currently_active_task_data = next(
-        (task for task in completed_historical_tasks_list if str(task["task_id"]) == str(currently_selected_task_id)),
-        None
+        (
+            task
+            for task in completed_historical_tasks_list
+            if str(task["task_id"]) == str(currently_selected_task_id)
+        ),
+        None,
     )
 
     if not currently_active_task_data:
-        st.warning("The selected run could not be found in the database. Please select another run from the sidebar.")
+        st.warning(
+            "The selected run could not be found in the database. "
+            "Please select another run from the sidebar."
+        )
         return
 
     # Inform the user which run is currently active and under evaluation
-    active_run_custom_name = currently_active_task_data.get("custom_name") or "Unnamed Run"
-    st.success(f"Evaluating Active Run: **{active_run_custom_name}** (ID: `{str(currently_selected_task_id)[:8]}`)")
+    active_run_custom_name = (
+        currently_active_task_data.get("custom_name") or "Unnamed Run"
+    )
+    st.success(
+        "Evaluating Active Run: "
+        f"**{active_run_custom_name}** (ID: `{str(currently_selected_task_id)[:8]}`)"
+    )
 
-    chosen_engine: str = st.selectbox("Select Evaluating AI Judge", models, disabled=disabled)
+    chosen_engine: str = st.selectbox(
+        "Select Evaluating AI Judge", models, disabled=disabled
+    )
 
     judge_iterations: int = st.slider(
         "Testing Iterations (Higher = more accurate but much slower!)",
         min_value=2,
         max_value=10,
         value=3,
-        disabled=disabled
+        disabled=disabled,
     )
 
     st.markdown("#### Original Source Documents Under Review")
-    render_trust_audit_ledger(source_context=cast(str | None, currently_active_task_data.get("source_context")))
+    render_trust_audit_ledger(
+        source_context=cast(
+            str | None, currently_active_task_data.get("source_context")
+        )
+    )
 
     if st.button("Run Stability Test", type="primary", disabled=disabled):
         report_data = currently_active_task_data.get("report") or {}
@@ -409,13 +436,13 @@ def _render_judge_tab(
             "source_context": currently_active_task_data.get("source_context", ""),
         }
         st.rerun()
-    
-    audit_metrics: dict | None = st.session_state.get("audit_metrics")
+
+    audit_metrics: dict[str, Any] | None = st.session_state.get("audit_metrics")
     if audit_metrics:
         st.markdown("---")
         st.success("Audit complete!")
 
-        metadata: dict = audit_metrics.get("metadata", {})
+        metadata: dict[str, Any] = audit_metrics.get("metadata", {})
         kappa_score = metadata.get("global_gwet_ac1") or metadata.get(
             "global_gwets_ac1", 0.0
         )
@@ -426,7 +453,7 @@ def _render_judge_tab(
             use_container_width=True,
         )
 
-    
+
 def main() -> None:
     """
     Main control flow
@@ -442,18 +469,14 @@ def main() -> None:
     is_running: bool = bool(st.session_state.get("job_running"))
 
     if is_running:
-        st.warning(
-            "Active AI job currently running..."
-        )
-    
+        st.warning("Active AI job currently running...")
+
     render_historical_sidebar()
 
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
 
-    tab_generator, tab_judge = st.tabs(
-        ["Document Generator", "LLM Judge Evaluation"]
-    )
+    tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
 
     with tab_generator:
         _render_generator_tab(
@@ -461,7 +484,7 @@ def main() -> None:
             templates=available_templates,
             models=available_models,
         )
-    
+
     with tab_judge:
         _render_judge_tab(
             disabled=is_running,
@@ -470,7 +493,7 @@ def main() -> None:
 
     if st.session_state.get("run_state") == "executing":
         st.rerun()
-    
+
 
 if __name__ == "__main__":
     main()
