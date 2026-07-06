@@ -24,6 +24,14 @@ class TestStreamlitAppIntegration:
         assert "run_state" in at.session_state
         assert at.session_state["run_state"] == "idle"
         assert at.session_state["job_running"] is False
+
+        # the landing page is the overview placeholder, no workflow tabs yet
+        assert at.session_state["selected_template"] == "OVERVIEW"
+        assert len(at.tabs) == 0
+
+        # navigating to a template page reveals the workflow tabs
+        at.sidebar.button(key="template_page_TEMPLATE_A").click().run()
+        assert not at.exception
         assert len(at.tabs) == 2
         assert "Document Generator" in at.tabs[0].label
         assert "LLM Judge Evaluation" in at.tabs[1].label

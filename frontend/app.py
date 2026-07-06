@@ -15,7 +15,7 @@ from frontend.components.results import (
     render_trust_audit_ledger,
 )
 from frontend.components.sidebar import render_historical_sidebar
-from frontend.config import MODEL_CONFIGURATIONS
+from frontend.config import MODEL_CONFIGURATIONS, TEMPLATE_DISPLAY_NAMES, TEMPLATE_DESCRIPTIONS
 from frontend.protocols import UploadedFileProtocol
 from frontend.services import send_audit_request, send_generation_request
 
@@ -148,6 +148,51 @@ def _render_workspace_cleaner() -> None:
         st.rerun()
 
 
+def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
+    """
+    Renders the sidebar page navigation: the overview landing page
+    followed by one page per form template.
+    Returns the active page (OVERVIEW_PAGE or a template key)
+    """
+
+    selected_page: str = st.session_state.get("selected_template", OVERVIEW_PAGE)
+    if selected_page != OVERVIEW_PAGE and selected_page not in templates:
+        selected_page = OVERVIEW_PAGE
+        st.session_state.selected_template = selected_page
+
+    if st.sidebar.button(
+        "Overview",
+        key="page_overview",
+        type="primary" if selected_page == OVERVIEW_PAGE else "secondary",
+        width="stretch",
+        disabled=disabled,
+    ):
+        st.session_state.selected_template = OVERVIEW_PAGE
+        st.rerun()
+
+    st.sidebar.subheader("Form templates")
+
+    for template_name in templates:
+        if st.sidebar.button(
+            TEMPLATE_DISPLAY_NAMES.get(template_name, template_name),
+            key=f"template_page_{template_name}",
+            type="primary" if template_name == selected_page else "secondary",
+            width="stretch",
+            disabled=disabled,
+        ):
+            st.session_state.selected_template = template_name
+            st.rerun()
+
+    return selected_page
+
+def _render_overview_page() -> None:
+    """
+    Placeholder landing page, real content to be filled in later
+    """
+
+    st.header("Overview Title Placeholder")
+    st.write("Overview text placeholder.")
+
 def _render_step_one_upload(
     *, disabled: bool, templates: list[str], models: list[str]
 ) -> str:
@@ -163,13 +208,13 @@ def _render_step_one_upload(
         disabled=disabled,
     )
 
-    target_document: str = st.sidebar.selectbox(
-        "Chose a form template to fill out",
-        templates,
-        disabled=disabled,
-    )
+    display_name: str = TEMPLATE_DISPLAY_NAMES.get(target_document, target_document)
 
-    st.header(f"1. Generate {target_document}")
+    st.header(f"1. Generate {display_name}")
+
+    form_description: str | None = TEMPLATE_DESCRIPTIONS.get(target_document)
+    if form_description:
+        st.markdown(form_description)
 
     uploaded_files = st.file_uploader(
         "Drop your scientific data, READMEs, publications, ect... here:",
@@ -306,9 +351,9 @@ def _render_generator_tab(
     the three step process
     """
 
-    target_document: str = _render_step_one_upload(
+    _render_step_one_upload(
         disabled=is_running,
-        templates=templates,
+        target_document=target_document,
         models=models,
     )
 
@@ -506,7 +551,7 @@ def main() -> None:
     with tab_generator:
         _render_generator_tab(
             is_running=is_running,
-            templates=available_templates,
+            target_document=selected_page,
             models=available_models,
         )
 

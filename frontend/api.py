@@ -9,7 +9,7 @@ from typing import Final, cast
 import requests
 
 from backend.esm_data.models import TaskId
-from frontend.config import BACKEND_URL
+from frontend.config import BACKEND_URL, TEMPLATE_SORT_ORDER
 from frontend.protocols import TaskProfileDict
 
 __all__ = [

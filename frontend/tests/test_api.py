@@ -22,7 +22,8 @@ class TestFrontendAPIClient:
         mock_get.return_value = mock_response
 
         result: list[str] = fetch_server_templates()
-        assert result == ["CUSTOM_DOC", "README"]
+        # pinned templates (README, DMP) come first, others keep server order
+        assert result == ["README", "CUSTOM_DOC"]
         mock_get.assert_called_once()
 
     @patch("frontend.api.requests.get")
@@ -31,7 +32,7 @@ class TestFrontendAPIClient:
     ) -> None:
         mock_get.side_effect = requests.exceptions.Timeout("Connection lost")
         result: list[str] = fetch_server_templates()
-        assert result == ["DMP", "README"]
+        assert result == ["README", "DMP"]
 
     @patch("frontend.api.requests.get")
     def test_fetch_server_templates_non_200(self, mock_get: MagicMock) -> None:
@@ -39,7 +40,7 @@ class TestFrontendAPIClient:
         mock_response.status_code = 500
         mock_get.return_value = mock_response
         result: list[str] = fetch_server_templates()
-        assert result == ["DMP", "README"]
+        assert result == ["README", "DMP"]
 
     @patch("frontend.api.requests.get")
     def test_get_task_profile_success(self, mock_get: MagicMock) -> None:
