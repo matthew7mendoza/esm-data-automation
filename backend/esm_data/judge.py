@@ -231,8 +231,6 @@ class LLMJudge:
                 openai.OpenAIError,
                 google.genai.errors.APIError,
                 ValueError,
-                TypeError,
-                RuntimeError,
             ) as api_operational_fault:
                 logger.error(
                     "Async evaluation operational fault on item "

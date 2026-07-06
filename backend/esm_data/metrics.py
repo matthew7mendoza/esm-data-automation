@@ -10,7 +10,7 @@ are consistent or not.
 import re
 from collections import Counter
 from collections.abc import Callable
-from typing import Literal
+from typing import Any, Literal
 
 __all__ = [
     "calculate_gwets_ac1",
@@ -109,7 +109,7 @@ def calculate_reasoning_stability(
     return (dominant_cluster_size / total_runs) * 100.0
 
 
-def extract_performance_metrics(api_tasks: list[dict]) -> dict[str, float | int]:
+def extract_performance_metrics(api_tasks: list[dict[str, Any]]) -> dict[str, float | int]:
     """
     Aggregates performance metrics over time by parsing a raw list of dictionary tasks
     fetched from the API task log. Extracts total documents processed, average script speeds,

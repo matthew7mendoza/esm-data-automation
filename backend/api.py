@@ -158,21 +158,21 @@ async def _run_extraction_thread(
 async def _perform_document_extraction(
     target_questions: list[str], model_provider: str, staging_path: Path
 ) -> tuple[ExtractionReport | None, str, str | None]:
+    if not target_questions:
+        raise ValueError("No fields found for data blueprint")
+
+    provider_instance = get_provider(name=model_provider)
+    generator = DocumentGenerator(provider=provider_instance)
+
     error_detail: str | None = None
     report: ExtractionReport | None = None
     final_unified_context: str = ""
 
     try:
-        if not target_questions:
-            raise ValueError("No fields found for data blueprint")
-
         loop = asyncio.get_running_loop()
         final_unified_context = await loop.run_in_executor(
             cpu_process_pool, _extract_context_cpu_worker, str(staging_path)
         )
-
-        provider_instance = get_provider(name=model_provider)
-        generator = DocumentGenerator(provider=provider_instance)
         report = await _run_extraction_thread(
             generator, target_questions, final_unified_context
         )
@@ -199,6 +199,7 @@ async def _perform_document_extraction(
 
 
 async def _finalize_heavy_processing(
+    *,
     task_id: TaskId,
     report: ExtractionReport | None,
     final_unified_context: str,
@@ -258,7 +259,10 @@ async def run_heavy_processing(
             await asyncio.to_thread(shutil.rmtree, staging_path)
 
     await _finalize_heavy_processing(
-        task_id, report, final_unified_context, error_detail
+        task_id=task_id,
+        report=report,
+        final_unified_context=final_unified_context,
+        error_detail=error_detail,
     )
 
 
