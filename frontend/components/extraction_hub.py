@@ -94,11 +94,50 @@ def _commit_drafts_to_db(task_id: str, all_questions: list[str]) -> bool:
 def _make_focus_callback(question: str) -> Callable[[], None]:
     """Returns an on_change callback that records which field is active."""
 
-
     def _set_focus() -> None:
         st.session_state[_FOCUS_KEY] = question
 
     return _set_focus
+
+
+def _stability_badge(r_stab: float | None) -> str:
+    """
+    Returns a small coloured emoji badge string based on the r_stab score.
+    Green ≥ 0.7, yellow ≥ 0.4, red otherwise. Returns empty string when absent.
+    """
+    if r_stab is None:
+        return ""
+    if r_stab >= 0.7:
+        return f" 🟢 {r_stab:.2f}"
+    if r_stab >= 0.4:
+        return f" 🟡 {r_stab:.2f}"
+    return f" 🔴 {r_stab:.2f}"
+
+
+def _build_stability_index(
+    audit_metrics: dict[str, object] | None,
+) -> dict[str, float]:
+    """
+    Extracts a {question: r_stab} mapping from audit_metrics
+    item_level_stability_metrics list, keyed by 'question'.
+    Returns an empty dict when no metrics are present.
+    """
+    if not isinstance(audit_metrics, dict):
+        return {}
+
+    items = audit_metrics.get("item_level_stability_metrics")
+    if not isinstance(items, list):
+        return {}
+
+    index: dict[str, float] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        question = item.get("question")
+        r_stab = item.get("reasoning_stability_r_stab")
+        if isinstance(question, str) and isinstance(r_stab, (int, float)):
+            index[question] = float(r_stab)
+    return index
 
 
 def _render_question_input(
@@ -108,6 +147,7 @@ def _render_question_input(
     extracted_answers: dict[str, str],
     missing_information: list[str],
     disabled: bool,
+    stability_index: dict[str, float],
 ) -> None:
     """Helper to render a single question text area in the ledger."""
     widget_key = _draft_widget_key(task_id, question)
@@ -118,7 +158,9 @@ def _render_question_input(
         question in missing_information
         and not extracted_answers.get(question, "").strip()
     )
-    label = f"Missing: {question}" if is_missing else question
+    prefix = "Missing: " if is_missing else ""
+    badge = _stability_badge(stability_index.get(question))
+    label = f"{prefix}{question}{badge}"
 
     st.text_area(
         label=label,
@@ -136,6 +178,7 @@ def _render_ledger_items(
     extracted_answers: dict[str, str],
     missing_information: list[str],
     disabled: bool,
+    stability_index: dict[str, float],
 ) -> None:
     """Helper to render all text areas inside the ledger container."""
     for question in all_questions:
@@ -145,6 +188,7 @@ def _render_ledger_items(
             extracted_answers=extracted_answers,
             missing_information=missing_information,
             disabled=disabled,
+            stability_index=stability_index,
         )
 
 
@@ -160,6 +204,7 @@ def _render_verification_ledger(
     Each widget key is the canonical draft_val_ path in Streamlit widget state.
     on_change sets active_focus_field so the right pane can highlight context.
     A single Save Changes button commits all fields atomically.
+    Inline accuracy badges are shown per-question when audit_metrics exist.
     """
 
     st.subheader("Verification Ledger")
@@ -170,6 +215,11 @@ def _render_verification_ledger(
         active_task_data=active_task_data,
         disabled=disabled,
     )
+
+    audit_metrics = cast(
+        dict[str, object] | None, st.session_state.get("audit_metrics")
+    )
+    stability_index = _build_stability_index(audit_metrics)
 
     all_questions: list[str] = list(extracted_answers.keys())
     new_questions = [q for q in missing_information if q not in all_questions]
@@ -183,6 +233,7 @@ def _render_verification_ledger(
             extracted_answers=extracted_answers,
             missing_information=missing_information,
             disabled=disabled,
+            stability_index=stability_index,
         )
 
     st.markdown("---")
@@ -295,7 +346,6 @@ def render_extraction_hub(*, disabled: bool = False) -> None:
         "report": report_dict,
         "source_context": source_context or "",
     }
-
 
     with left_col:
         _render_verification_ledger(

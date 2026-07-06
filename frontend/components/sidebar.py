@@ -10,7 +10,7 @@ import streamlit as st
 
 from frontend.config import BACKEND_URL
 
-__all__ = ["APP_MODES", "render_historical_sidebar"]
+__all__ = ["render_historical_sidebar"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -154,23 +154,10 @@ def _delete_historical_task(task_id: str) -> bool:
     return True
 
 
-APP_MODES: Final[list[str]] = [
-    "Extraction Hub",
-    "Template Architect",
-    "Pipeline Insights",
-    "Batch Queue",
-    "LLM Judge",
-]
-
-
-
 def render_historical_sidebar() -> None:
     """
     Fetches the history of completed tasks and displays
     them on the sidebar dropdown so users can scroll through past runs.
-    Navigation (segmented_control) is intentionally omitted here and
-    rendered directly in app.py before the routing branch so it stays
-    visible even when the history DB API is offline.
     """
 
     past_tasks = _fetch_past_tasks_raw()
