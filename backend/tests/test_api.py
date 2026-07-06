@@ -1,12 +1,33 @@
 import asyncio
 
 from fastapi.testclient import TestClient
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from backend.api import app
 from backend.esm_data.database import async_session_creator
 from backend.esm_data.db_models import Task
 
 client: TestClient = TestClient(app)
+
+
+async def _db_delete_existing_task(session: AsyncSession, task_id: str) -> None:
+    existing = await session.get(Task, task_id)
+    if not existing:
+        return
+    await session.delete(existing)
+    await session.commit()
+
+
+async def _db_create_task(task_id: str) -> None:
+    async with async_session_creator() as session:
+        await _db_delete_existing_task(session, task_id)
+        task = Task(
+            task_id=task_id,
+            status="COMPLETED",
+            report_json='{"extracted_answers": {}, "missing_information": []}',
+        )
+        session.add(task)
+        await session.commit()
 
 
 class TestFastAPIEndpoints:
@@ -96,3 +117,22 @@ class TestFastAPIEndpoints:
                     await session.commit()
 
         asyncio.run(delete_test_task())
+
+    def test_delete_task_not_found(self) -> None:
+        response = client.delete("/api/tasks/nonexistent-delete-id")
+        assert response.status_code == 404
+        assert response.json()["detail"] == "The request job does not exist."
+
+    def test_delete_task_success(self) -> None:
+        task_id = "test-task-delete-id"
+        asyncio.run(_db_create_task(task_id))
+
+        # Now delete the task
+        response = client.delete(f"/api/tasks/{task_id}")
+        assert response.status_code == 200
+        assert response.json()["status"] == "DELETED"
+        assert response.json()["task_id"] == task_id
+
+        # Verify it is deleted from the DB
+        status_response = client.get(f"/api/tasks/{task_id}")
+        assert status_response.status_code == 404

@@ -371,6 +371,32 @@ async def get_task_status(
     )
 
 
+@app.delete("/api/tasks/{task_id}")
+async def delete_task(
+    task_id: TaskId,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, str]:
+    """
+    Remove a task/run from history.
+    Also deletes its staged files if they exist.
+    """
+    task = await session.get(Task, task_id)
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The request job does not exist.",
+        )
+
+    await session.delete(task)
+    await session.commit()
+
+    staging_path = RUN_DIR / task_id
+    if staging_path.exists():
+        await asyncio.to_thread(shutil.rmtree, staging_path)
+
+    return {"status": "DELETED", "task_id": task_id}
+
+
 @app.patch("/api/tasks/{task_id}/report", status_code=status.HTTP_200_OK)
 async def update_task_report(
     *,

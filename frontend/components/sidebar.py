@@ -121,6 +121,35 @@ def _find_active_selection_option(
     return "-- Create New Run --"
 
 
+def _send_delete_call(task_id: str) -> requests.Response | None:
+    try:
+        return requests.delete(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
+    except requests.exceptions.RequestException as err:
+        logger.error(f"Error deleting task {task_id}: {err}", exc_info=True)
+        st.error(f"Network error trying to delete run: {err}")
+        return None
+
+
+def _remove_audit_from_session(task_id: str) -> None:
+    historical_audits = st.session_state.get("historical_audits")
+    if isinstance(historical_audits, dict):
+        historical_audits.pop(task_id, None)
+
+
+def _delete_historical_task(task_id: str) -> bool:
+    response = _send_delete_call(task_id)
+    if not response:
+        return False
+
+    if response.status_code != 200:
+        st.error("Failed to delete task from backend database")
+        return False
+
+    _remove_audit_from_session(task_id)
+    st.toast("Run deleted successfully!")
+    return True
+
+
 def render_historical_sidebar() -> None:
     """
     Fetches the history of completed tasks and displays
@@ -166,3 +195,47 @@ def render_historical_sidebar() -> None:
         on_change=_on_history_change,
         disabled=st.session_state.get("job_running", False),
     )
+
+    _render_historical_deletion(currently_active_task_id)
+
+
+def _render_historical_deletion(currently_active_task_id: str | None) -> None:
+    if not currently_active_task_id:
+        return
+
+    st.sidebar.markdown("---")
+    delete_clicked = st.sidebar.button(
+        "Delete This Run",
+        type="primary",
+        disabled=st.session_state.get("job_running", False),
+    )
+    if delete_clicked:
+        st.session_state.show_delete_confirmation = True
+
+    _render_confirmation_dialogue(currently_active_task_id)
+
+
+def _render_confirmation_dialogue(currently_active_task_id: str) -> None:
+    show_conf = st.session_state.get("show_delete_confirmation", False)
+    if not show_conf:
+        return
+
+    st.sidebar.warning("Are you sure you want to delete this job?")
+    col1, col2 = st.sidebar.columns(2)
+    yes_clicked = col1.button("Yes, Delete", key="confirm_delete")
+    no_clicked = col2.button("Cancel", key="cancel_delete")
+
+    if no_clicked:
+        st.session_state.show_delete_confirmation = False
+        st.rerun()
+
+    if not yes_clicked:
+        return
+
+    st.session_state.show_delete_confirmation = False
+    success = _delete_historical_task(currently_active_task_id)
+    if not success:
+        return
+
+    _purge_active_view()
+    st.rerun()
