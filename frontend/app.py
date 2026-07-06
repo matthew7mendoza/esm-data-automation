@@ -10,11 +10,12 @@ import streamlit as st
 from docx import Document
 
 from frontend.api import fetch_all_historical_tasks, fetch_server_templates
+from frontend.components.extraction_hub import render_extraction_hub
 from frontend.components.results import (
     render_answers_and_missing_sections,
     render_trust_audit_ledger,
 )
-from frontend.components.sidebar import render_historical_sidebar
+from frontend.components.sidebar import APP_MODES, render_historical_sidebar
 from frontend.config import MODEL_CONFIGURATIONS
 from frontend.protocols import UploadedFileProtocol
 from frontend.services import send_audit_request, send_generation_request
@@ -317,7 +318,7 @@ def _render_generator_tab(
     if not report:
         return
 
-    render_answers_and_missing_sections(disabled=is_running)
+    render_extraction_hub(disabled=is_running)
     st.markdown("---")
 
     missing_question: list[str] = cast(
@@ -501,6 +502,15 @@ def main() -> None:
 
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
+
+    # Navigation must render before routing so it remains visible
+    # even when the history DB API is entirely offline.
+    st.sidebar.segmented_control(
+        "Navigation",
+        options=APP_MODES,
+        key="app_mode",
+    )
+    st.sidebar.markdown("---")
 
     active_mode: str = str(st.session_state.get("app_mode", "Extraction Hub"))
 
