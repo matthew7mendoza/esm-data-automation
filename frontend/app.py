@@ -74,6 +74,7 @@ def _handle_pending_audit(audit_args: object) -> None:
         source_context=cast(str, args_copy.get("source_context", "")),
     )
     if metrics:
+        metrics["task_id"] = task_id
         st.session_state.audit_metrics = metrics
         historical_audits = st.session_state.get("historical_audits")
         if not isinstance(historical_audits, dict):

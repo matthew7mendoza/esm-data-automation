@@ -46,7 +46,11 @@ def _update_session_state_with_task(
         st.session_state.audit_metrics = None
         return
 
-    st.session_state.audit_metrics = historical_audit_records.get(task_id)
+    metrics = historical_audit_records.get(task_id)
+    if isinstance(metrics, dict):
+        metrics["task_id"] = task_id
+
+    st.session_state.audit_metrics = metrics
 
 
 def _purge_active_view() -> None:

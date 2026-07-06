@@ -10,6 +10,7 @@ from typing import cast
 import streamlit as st
 
 from frontend.api import update_task_report
+from frontend.components.stability_ribbon import render_stability_ribbon
 
 __all__ = ["render_extraction_hub"]
 
@@ -96,11 +97,59 @@ def _make_focus_callback(question: str):
     return _set_focus
 
 
+def _render_question_input(
+    *,
+    task_id: str,
+    question: str,
+    extracted_answers: dict[str, str],
+    missing_information: list[str],
+    disabled: bool,
+) -> None:
+    """Helper to render a single question text area in the ledger."""
+    widget_key = _draft_widget_key(task_id, question)
+    initial_value = extracted_answers.get(question, "")
+    st.session_state.setdefault(widget_key, initial_value)
+
+    is_missing = (
+        question in missing_information
+        and not extracted_answers.get(question, "").strip()
+    )
+    label = f"Missing: {question}" if is_missing else question
+
+    st.text_area(
+        label=label,
+        key=widget_key,
+        disabled=disabled,
+        height=100,
+        on_change=_make_focus_callback(question),
+    )
+
+
+def _render_ledger_items(
+    *,
+    task_id: str,
+    all_questions: list[str],
+    extracted_answers: dict[str, str],
+    missing_information: list[str],
+    disabled: bool,
+) -> None:
+    """Helper to render all text areas inside the ledger container."""
+    for question in all_questions:
+        _render_question_input(
+            task_id=task_id,
+            question=question,
+            extracted_answers=extracted_answers,
+            missing_information=missing_information,
+            disabled=disabled,
+        )
+
+
 def _render_verification_ledger(
     task_id: str,
     extracted_answers: dict[str, str],
     missing_information: list[str],
     disabled: bool,
+    active_task_data: dict[str, object],
 ) -> None:
     """
     Left pane: scrollable list of question/answer text areas.
@@ -112,35 +161,25 @@ def _render_verification_ledger(
     st.subheader("Verification Ledger")
     st.caption("Edit answers below, then click **Save Changes** to persist.")
 
+    render_stability_ribbon(
+        task_id=task_id,
+        active_task_data=active_task_data,
+        disabled=disabled,
+    )
+
     all_questions: list[str] = list(extracted_answers.keys())
-    for q in missing_information:
-        if q not in all_questions:
-            all_questions.append(q)
+    new_questions = [q for q in missing_information if q not in all_questions]
+    all_questions.extend(new_questions)
 
     ledger_container = st.container(height=620, border=False)
     with ledger_container:
-        for question in all_questions:
-            widget_key = _draft_widget_key(task_id, question)
-
-            # Seed initial value into widget state only when key is absent
-            # to avoid overwriting in-progress edits on reruns.
-            initial_value = extracted_answers.get(question, "")
-            st.session_state.setdefault(widget_key, initial_value)
-
-            is_missing = (
-                question in missing_information
-                and not extracted_answers.get(question, "").strip()
-            )
-            label = f"Missing: {question}" if is_missing else question
-
-            with st.container():
-                st.text_area(
-                    label=label,
-                    key=widget_key,
-                    disabled=disabled,
-                    height=100,
-                    on_change=_make_focus_callback(question),
-                )
+        _render_ledger_items(
+            task_id=task_id,
+            all_questions=all_questions,
+            extracted_answers=extracted_answers,
+            missing_information=missing_information,
+            disabled=disabled,
+        )
 
     st.markdown("---")
 
@@ -248,12 +287,18 @@ def render_extraction_hub(*, disabled: bool = False) -> None:
 
     left_col, right_col = st.columns([1, 1])
 
+    active_task_data = {
+        "report": report_dict,
+        "source_context": source_context or "",
+    }
+
     with left_col:
         _render_verification_ledger(
             task_id=task_id,
             extracted_answers=extracted_answers,
             missing_information=missing_information,
             disabled=disabled,
+            active_task_data=active_task_data,
         )
 
     with right_col:
