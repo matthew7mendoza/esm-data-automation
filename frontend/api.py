@@ -25,20 +25,23 @@ logger: Final[logging.Logger] = logging.getLogger(__name__)
 def fetch_server_templates() -> list[str]:
     """
     Ask background server for complete collection of
-    document templates
+    document templates, sorted by TEMPLATE_SORT_ORDER.
     """
 
     try:
         response = requests.get(f"{BACKEND_URL}/api/templates", timeout=5)
     except requests.exceptions.RequestException as error:
         logger.warning(f"Unable to fetch templates from worker program: {error}")
-        return ["DMP", "README"]
+        return ["README", "DMP"]
 
     if response.status_code != 200:
         logger.warning(f"Backend returned unexpected status: {response.status_code}")
-        return ["DMP", "README"]
+        return ["README", "DMP"]
 
-    return cast(list[str], response.json())
+    raw_templates = cast(list[str], response.json())
+    sorted_templates = [t for t in TEMPLATE_SORT_ORDER if t in raw_templates]
+    others = [t for t in raw_templates if t not in TEMPLATE_SORT_ORDER]
+    return sorted_templates + others
 
 
 def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:

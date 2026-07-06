@@ -10,17 +10,15 @@ import streamlit as st
 
 from frontend.config import BACKEND_URL
 
-__all__ = ["render_historical_sidebar"]
+__all__ = ["delete_historical_task", "purge_active_view", "render_historical_sidebar"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
 
 def _fetch_task_profile(task_id: str) -> dict[str, object] | None:
+    response = None
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
-        if response.status_code == 200:
-            return cast(dict[str, object], response.json())
-        st.error("Failed to extract full analysis data from backend")
     except requests.exceptions.RequestException as network_transport_fault:
         logger.error(
             "Network communication loss when trying to read historical data.",
@@ -30,7 +28,15 @@ def _fetch_task_profile(task_id: str) -> dict[str, object] | None:
             "Network error trying to fetch historical profile: "
             f"{network_transport_fault}"
         )
-    return None
+
+    if not response:
+        return None
+
+    if response.status_code != 200:
+        st.error("Failed to extract full analysis data from backend")
+        return None
+
+    return cast(dict[str, object], response.json())
 
 
 def _update_session_state_with_task(
@@ -49,7 +55,7 @@ def _update_session_state_with_task(
     st.session_state.audit_metrics = historical_audit_records.get(task_id)
 
 
-def _purge_active_view() -> None:
+def purge_active_view() -> None:
     active_view_session_keys: list[str] = [
         "generator_report",
         "source_context",
@@ -62,8 +68,8 @@ def _purge_active_view() -> None:
 
 
 def _resolve_selected_task_id(run_name: str) -> str | None:
-    if run_name == "-- Create New Run --":
-        _purge_active_view()
+    if run_name == "Select a past run...":
+        purge_active_view()
         return None
 
     task_id_mapping = st.session_state.get("task_mapping")
@@ -92,33 +98,62 @@ def _on_history_change() -> None:
         return
 
     job_details_payload = _fetch_task_profile(task_id)
-    if job_details_payload is not None:
-        _update_session_state_with_task(task_id, job_details_payload)
+    if job_details_payload is None:
+        return
+
+    _update_session_state_with_task(task_id, job_details_payload)
+
+
+def _on_new_click() -> None:
+    purge_active_view()
+    st.session_state.history_selectbox = "Select a past run..."
+
+
+def _on_delete_click(task_id: str | None) -> None:
+    if not task_id:
+        return
+    success = delete_historical_task(task_id)
+    if not success:
+        return
+    purge_active_view()
+    st.session_state.history_selectbox = "Select a past run..."
 
 
 def _fetch_past_tasks_raw() -> list[dict[str, object]] | None:
+    response = None
     try:
         response = requests.get(f"{BACKEND_URL}/api/tasks", timeout=5)
-        if response.status_code == 200:
-            return cast(list[dict[str, object]], response.json())
-        st.sidebar.caption("History tracker offline!")
     except requests.exceptions.RequestException as connection_offline_error:
         logger.warning(
             f"Unable to read connection tracking indexes: {connection_offline_error}"
         )
         st.sidebar.caption("History tracker offline!")
-    return None
+
+    if not response:
+        return None
+
+    if response.status_code != 200:
+        st.sidebar.caption("History tracker offline!")
+        return None
+
+    return cast(list[dict[str, object]], response.json())
 
 
 def _find_active_selection_option(
     mapping: dict[str, dict[str, object]], active_id: object
 ) -> str:
     if not active_id:
-        return "-- Create New Run --"
-    for opt, task in mapping.items():
-        if str(task.get("task_id")) == str(active_id):
-            return opt
-    return "-- Create New Run --"
+        return "Select a past run..."
+
+    matching_opts = [
+        opt
+        for opt, task in mapping.items()
+        if str(task.get("task_id")) == str(active_id)
+    ]
+    if not matching_opts:
+        return "Select a past run..."
+
+    return matching_opts[0]
 
 
 def _send_delete_call(task_id: str) -> requests.Response | None:
@@ -136,7 +171,7 @@ def _remove_audit_from_session(task_id: str) -> None:
         historical_audits.pop(task_id, None)
 
 
-def _delete_historical_task(task_id: str) -> bool:
+def delete_historical_task(task_id: str) -> bool:
     response = _send_delete_call(task_id)
     if not response:
         return False
@@ -155,19 +190,21 @@ def render_historical_sidebar() -> None:
     Fetches the history of completed tasks and displays
     them on the sidebar dropdown so users can scroll through past runs.
     """
+    st.sidebar.markdown(
+        "<div style='font-size: 0.75rem; font-weight: 700; "
+        "letter-spacing: 0.05em; color: #6b7280; text-transform: uppercase; "
+        "margin-top: 2rem; margin-bottom: 0.5rem; padding-left: 12px;'>"
+        "Session Management</div>",
+        unsafe_allow_html=True,
+    )
+
     past_tasks = _fetch_past_tasks_raw()
-    if past_tasks is None:
-        return
+    completed_historical_tasks = []
+    if past_tasks is not None:
+        completed_historical_tasks = [
+            task for task in past_tasks if task.get("status") == "COMPLETED"
+        ]
 
-    completed_historical_tasks = [
-        task for task in past_tasks if task.get("status") == "COMPLETED"
-    ]
-
-    if not completed_historical_tasks:
-        st.sidebar.caption("No history")
-        return
-
-    # Maps display name to full task data
     task_display_options_mapping = {
         (
             f"{task.get('custom_name')} ({str(task['task_id'])[:8]})"
@@ -179,7 +216,7 @@ def render_historical_sidebar() -> None:
 
     st.session_state.task_mapping = task_display_options_mapping
     available_selection_options_list = [
-        "-- Create New Run --",
+        "Select a past run...",
         *task_display_options_mapping,
     ]
 
@@ -188,54 +225,33 @@ def render_historical_sidebar() -> None:
         task_display_options_mapping, currently_active_task_id
     )
 
+    is_job_running = bool(st.session_state.get("job_running"))
+
     st.sidebar.selectbox(
         "Reload a past analysis:",
         options=available_selection_options_list,
         key="history_selectbox",
         on_change=_on_history_change,
-        disabled=st.session_state.get("job_running", False),
+        disabled=is_job_running,
     )
 
-    _render_historical_deletion(currently_active_task_id)
-
-
-def _render_historical_deletion(currently_active_task_id: str | None) -> None:
-    if not currently_active_task_id:
-        return
-
-    st.sidebar.markdown("---")
-    delete_clicked = st.sidebar.button(
-        "Delete This Run",
-        type="primary",
-        disabled=st.session_state.get("job_running", False),
-    )
-    if delete_clicked:
-        st.session_state.show_delete_confirmation = True
-
-    _render_confirmation_dialogue(currently_active_task_id)
-
-
-def _render_confirmation_dialogue(currently_active_task_id: str) -> None:
-    show_conf = st.session_state.get("show_delete_confirmation", False)
-    if not show_conf:
-        return
-
-    st.sidebar.warning("Are you sure you want to delete this job?")
     col1, col2 = st.sidebar.columns(2)
-    yes_clicked = col1.button("Yes, Delete", key="confirm_delete")
-    no_clicked = col2.button("Cancel", key="cancel_delete")
 
-    if no_clicked:
-        st.session_state.show_delete_confirmation = False
-        st.rerun()
+    col1.button(
+        "+ New",
+        key="new_run_sidebar_btn",
+        type="secondary",
+        use_container_width=True,
+        disabled=is_job_running,
+        on_click=_on_new_click,
+    )
 
-    if not yes_clicked:
-        return
-
-    st.session_state.show_delete_confirmation = False
-    success = _delete_historical_task(currently_active_task_id)
-    if not success:
-        return
-
-    _purge_active_view()
-    st.rerun()
+    col2.button(
+        "Delete Current",
+        key="delete_run_sidebar_btn",
+        type="secondary",
+        use_container_width=True,
+        disabled=not currently_active_task_id or is_job_running,
+        on_click=_on_delete_click,
+        args=(currently_active_task_id,),
+    )

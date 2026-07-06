@@ -4,8 +4,8 @@ from streamlit.testing.v1 import AppTest
 
 
 class TestStreamlitAppIntegration:
-    @patch("frontend.app.fetch_server_templates")
-    @patch("frontend.app.fetch_all_historical_tasks")
+    @patch("frontend.api.fetch_server_templates")
+    @patch("frontend.api.fetch_all_historical_tasks")
     @patch("frontend.components.sidebar.requests.get")
     def test_app_initializes_cleanly(
         self, mock_get: MagicMock, mock_historical: MagicMock, mock_templates: MagicMock
