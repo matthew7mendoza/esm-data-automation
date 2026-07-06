@@ -12,13 +12,19 @@ from backend.esm_data.models import TaskId
 from frontend.config import BACKEND_URL, TEMPLATE_SORT_ORDER
 from frontend.protocols import TaskProfileDict
 
-__all__ = ["fetch_server_templates", "get_task_profile", "fetch_all_historical_tasks", "update_task_report"]
+__all__ = [
+    "fetch_all_historical_tasks",
+    "fetch_server_templates",
+    "get_task_profile",
+    "update_task_report",
+]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
+
 def fetch_server_templates() -> list[str]:
     """
-    Ask background server for complete collection of 
+    Ask background server for complete collection of
     document templates
     """
 
@@ -26,21 +32,14 @@ def fetch_server_templates() -> list[str]:
         response = requests.get(f"{BACKEND_URL}/api/templates", timeout=5)
     except requests.exceptions.RequestException as error:
         logger.warning(f"Unable to fetch templates from worker program: {error}")
-        return list(TEMPLATE_SORT_ORDER)
+        return ["DMP", "README"]
 
     if response.status_code != 200:
         logger.warning(f"Backend returned unexpected status: {response.status_code}")
-        return list(TEMPLATE_SORT_ORDER)
+        return ["DMP", "README"]
 
-    templates = cast(list[str], response.json())
-    return sorted(
-        templates,
-        key=lambda name: (
-            TEMPLATE_SORT_ORDER.index(name)
-            if name in TEMPLATE_SORT_ORDER
-            else len(TEMPLATE_SORT_ORDER)
-        ),
-    )
+    return cast(list[str], response.json())
+
 
 def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
     """
@@ -49,11 +48,12 @@ def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
 
     with contextlib.suppress(requests.exceptions.RequestException):
         response = requests.get(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
-        
+
         if response.status_code == 200:
             return cast(TaskProfileDict, response.json())
-        
+
     return None
+
 
 def fetch_all_historical_tasks() -> list[dict[str, object]]:
     """
@@ -70,10 +70,7 @@ def fetch_all_historical_tasks() -> list[dict[str, object]]:
 
 
 def update_task_report(
-    *,
-    task_id: str,
-    extracted_answers: dict[str, str],
-    missing_information: list[str]
+    *, task_id: str, extracted_answers: dict[str, str], missing_information: list[str]
 ) -> bool:
     """
     Sends a PATCH request to backend to save edited answers and missing info.
@@ -81,13 +78,11 @@ def update_task_report(
 
     payload: dict[str, dict[str, str] | list[str]] = {
         "extracted_answers": extracted_answers,
-        "missing_information": missing_information
+        "missing_information": missing_information,
     }
     try:
         response = requests.patch(
-            f"{BACKEND_URL}/api/tasks/{task_id}/report",
-            json=payload,
-            timeout=5
+            f"{BACKEND_URL}/api/tasks/{task_id}/report", json=payload, timeout=5
         )
         return response.status_code == 200
     except requests.exceptions.RequestException as error:

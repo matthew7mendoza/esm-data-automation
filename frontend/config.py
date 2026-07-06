@@ -65,3 +65,4 @@ MODEL_CONFIGURATIONS: Final[dict[str, str]] ={
     "Nvidia": "nemotron"
 }
 
+MODEL_CONFIGURATIONS: Final[dict[str, str]] = {"Gemini": "gemini", "Nvidia": "nemotron"}

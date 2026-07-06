@@ -1,31 +1,32 @@
 import pytest
 from pydantic import ValidationError
+
 from backend.esm_data.models import (
-    SpearAutomationError,
-    DocumentExtractionError,
-    CorruptedDocumentError,
     AgentConfigurationError,
     AgentExecutionError,
-    RubricItemConfig,
-    NoveltyEntrySchema,
-    ComplianceScoringSchema,
-    ComplianceCategoryGroup,
-    MasterAuditPayloadSchema,
     AnswerPair,
-    FormResponses,
-    TaskStatusResponse,
     AuditRequest,
+    ComplianceCategoryGroup,
+    ComplianceScoringSchema,
+    CorruptedDocumentError,
+    DocumentExtractionError,
+    FormResponses,
+    MasterAuditPayloadSchema,
+    NoveltyEntrySchema,
+    RubricItemConfig,
+    SpearAutomationError,
+    TaskStatusResponse,
     TemplateCreateRequest,
 )
 
-class TestPydanticDomainModels:
 
+class TestPydanticDomainModels:
     def test_compliance_scoring_schema_valid(self) -> None:
         payload = {
             "item_id": "1.1",
             "question": "Is the variable TAS?",
             "justification": "The text explicitly states the variable is TAS.",
-            "answer": "Yes"
+            "answer": "Yes",
         }
         model = ComplianceScoringSchema(**payload)
         assert model.item_id == "1.1"
@@ -38,16 +39,13 @@ class TestPydanticDomainModels:
             "item_id": "1.1",
             "question": "Is the variable TAS?",
             "justification": "Maybe.",
-            "answer": "Maybe"
+            "answer": "Maybe",
         }
         with pytest.raises(ValidationError):
             ComplianceScoringSchema(**payload)
 
     def test_compliance_scoring_schema_missing_fields(self) -> None:
-        payload = {
-            "item_id": "1.1",
-            "answer": "Yes"
-        }
+        payload = {"item_id": "1.1", "answer": "Yes"}
         with pytest.raises(ValidationError):
             ComplianceScoringSchema(**payload)
 
@@ -55,7 +53,7 @@ class TestPydanticDomainModels:
         payload = {
             "id": "2.A",
             "question": "What is the numeric value?",
-            "strategy": "Numeric"
+            "strategy": "Numeric",
         }
         model = RubricItemConfig(**payload)
         assert model.id == "2.A"
@@ -66,7 +64,7 @@ class TestPydanticDomainModels:
         payload = {
             "id": "2.A",
             "question": "What is the numeric value?",
-            "strategy": "InvalidStrategy"
+            "strategy": "InvalidStrategy",
         }
         with pytest.raises(ValidationError):
             RubricItemConfig(**payload)
@@ -76,7 +74,7 @@ class TestPydanticDomainModels:
             "relevance": 1,
             "originality": 2,
             "gap_addressing": 3,
-            "non_obviousness": 0
+            "non_obviousness": 0,
         }
         model = NoveltyEntrySchema(**payload)
         assert model.relevance == 1
@@ -86,23 +84,23 @@ class TestPydanticDomainModels:
 
     def test_novelty_entry_schema_invalid_bounds(self) -> None:
         with pytest.raises(ValidationError):
-            NoveltyEntrySchema(relevance=2, originality=2, gap_addressing=3, non_obviousness=0)
+            NoveltyEntrySchema(
+                relevance=2, originality=2, gap_addressing=3, non_obviousness=0
+            )
         with pytest.raises(ValidationError):
-            NoveltyEntrySchema(relevance=1, originality=4, gap_addressing=3, non_obviousness=0)
+            NoveltyEntrySchema(
+                relevance=1, originality=4, gap_addressing=3, non_obviousness=0
+            )
         with pytest.raises(ValidationError):
-            NoveltyEntrySchema(relevance=1, originality=2, gap_addressing=-1, non_obviousness=0)
+            NoveltyEntrySchema(
+                relevance=1, originality=2, gap_addressing=-1, non_obviousness=0
+            )
 
     def test_compliance_category_group_valid(self) -> None:
         item = ComplianceScoringSchema(
-            item_id="1.1",
-            question="Q1",
-            justification="Justification",
-            answer="Yes"
+            item_id="1.1", question="Q1", justification="Justification", answer="Yes"
         )
-        payload = {
-            "category_name": "Category A",
-            "items": [item]
-        }
+        payload = {"category_name": "Category A", "items": [item]}
         model = ComplianceCategoryGroup(**payload)
         assert model.category_name == "Category A"
         assert len(model.items) == 1
@@ -110,10 +108,7 @@ class TestPydanticDomainModels:
 
     def test_master_audit_payload_schema_valid(self) -> None:
         item = ComplianceScoringSchema(
-            item_id="1.1",
-            question="Q1",
-            justification="Justification",
-            answer="Yes"
+            item_id="1.1", question="Q1", justification="Justification", answer="Yes"
         )
         group = ComplianceCategoryGroup(category_name="Cat", items=[item])
         model = MasterAuditPayloadSchema(categories=[group])
@@ -142,7 +137,7 @@ class TestPydanticDomainModels:
             custom_name="CustomName",
             report=None,
             source_context=None,
-            detail=None
+            detail=None,
         )
         assert model.task_id == "task-123"
         assert model.status == "PENDING"
@@ -150,9 +145,7 @@ class TestPydanticDomainModels:
 
     def test_audit_request_valid(self) -> None:
         model = AuditRequest(
-            source_context="Context text",
-            answers={"Q1": "Yes"},
-            iterations=3
+            source_context="Context text", answers={"Q1": "Yes"}, iterations=3
         )
         assert model.source_context == "Context text"
         assert model.answers == {"Q1": "Yes"}
@@ -160,9 +153,7 @@ class TestPydanticDomainModels:
 
     def test_template_create_request_valid(self) -> None:
         model = TemplateCreateRequest(
-            name="DOI",
-            description="DOI template",
-            questions=["Q1", "Q2"]
+            name="DOI", description="DOI template", questions=["Q1", "Q2"]
         )
         assert model.name == "DOI"
         assert model.description == "DOI template"

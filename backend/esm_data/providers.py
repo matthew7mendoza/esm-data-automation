@@ -8,20 +8,20 @@ between providers.
 import os
 from collections.abc import Callable
 from functools import partial
-from typing import Final, Protocol, TypedDict, Unpack, runtime_checkable, cast
+from typing import Final, Protocol, TypedDict, Unpack, cast, runtime_checkable
 
+import openai
 from google import genai
 from google.genai import types
-import openai
 from pydantic import BaseModel
 
 __all__: Final[list[str]] = [
-    "LLMProvider",
     "GeminiProvider",
+    "LLMProvider",
     "OpenAIProvider",
     "ProviderArgs",
-    "register_provider",
     "get_provider",
+    "register_provider",
 ]
 
 
@@ -120,7 +120,7 @@ class OpenAIProvider:
     that have the same format as OpenAI by changing base_url
     """
 
-    __slots__ = ("client", "async_client", "model_name")
+    __slots__ = ("async_client", "client", "model_name")
 
     def __init__(
         self,
@@ -194,9 +194,7 @@ class ProviderArgs(TypedDict, total=False):
 _REGISTRY: Final[dict[str, Callable[..., LLMProvider]]] = {}
 
 
-def register_provider(
-    name: str, provider_factory: Callable[..., LLMProvider]
-) -> None:
+def register_provider(name: str, provider_factory: Callable[..., LLMProvider]) -> None:
     """
     Adds a new AI provider factory to the system's list
     """
