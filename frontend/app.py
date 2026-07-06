@@ -10,12 +10,14 @@ import streamlit as st
 from docx import Document
 
 from frontend.api import fetch_all_historical_tasks, fetch_server_templates
+from frontend.components.batch_queue import render_batch_queue
 from frontend.components.extraction_hub import render_extraction_hub
+from frontend.components.pipeline_insights import render_pipeline_insights
 from frontend.components.results import (
-    render_answers_and_missing_sections,
     render_trust_audit_ledger,
 )
 from frontend.components.sidebar import APP_MODES, render_historical_sidebar
+from frontend.components.template_architect import render_template_architect
 from frontend.config import MODEL_CONFIGURATIONS
 from frontend.protocols import UploadedFileProtocol
 from frontend.services import send_audit_request, send_generation_request
@@ -482,6 +484,40 @@ def _render_judge_tab(*, disabled: bool, models: list[str]) -> None:
     _render_audit_results(audit_metrics)
 
 
+def _route_app_mode(
+    active_mode: str,
+    is_running: bool,
+    templates: list[str],
+    models: list[str],
+) -> None:
+    """Routes user to the active application view."""
+    if active_mode == "Extraction Hub":
+        _render_generator_tab(
+            is_running=is_running,
+            templates=templates,
+            models=models,
+        )
+        return
+
+    if active_mode == "Template Architect":
+        render_template_architect()
+        return
+
+    if active_mode == "Pipeline Insights":
+        historical_tasks = fetch_all_historical_tasks()
+        render_pipeline_insights(historical_tasks)
+        return
+
+    if active_mode == "Batch Queue":
+        render_batch_queue()
+        return
+
+    _render_judge_tab(
+        disabled=is_running,
+        models=models,
+    )
+
+
 def main() -> None:
     """
     Main control flow
@@ -515,29 +551,16 @@ def main() -> None:
 
     active_mode: str = str(st.session_state.get("app_mode", "Extraction Hub"))
 
-    if active_mode == "Extraction Hub":
-        _render_generator_tab(
-            is_running=is_running,
-            templates=available_templates,
-            models=available_models,
-        )
-        return
-
-    if active_mode == "Template Architect":
-        st.write("View Placeholder")
-        return
-
-    if active_mode == "Pipeline Insights":
-        st.write("View Placeholder")
-        return
-
-    _render_judge_tab(
-        disabled=is_running,
+    _route_app_mode(
+        active_mode=active_mode,
+        is_running=is_running,
+        templates=available_templates,
         models=available_models,
     )
 
     if st.session_state.get("run_state") == "executing":
         st.rerun()
+
 
 
 if __name__ == "__main__":

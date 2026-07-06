@@ -10,7 +10,7 @@ import streamlit as st
 
 from frontend.config import BACKEND_URL
 
-__all__ = ["render_historical_sidebar", "APP_MODES"]
+__all__ = ["APP_MODES", "render_historical_sidebar"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -158,7 +158,10 @@ APP_MODES: Final[list[str]] = [
     "Extraction Hub",
     "Template Architect",
     "Pipeline Insights",
+    "Batch Queue",
+    "LLM Judge",
 ]
+
 
 
 def render_historical_sidebar() -> None:

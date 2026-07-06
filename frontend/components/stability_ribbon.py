@@ -3,6 +3,7 @@ Inline analytical alert ribbon and advanced judge panels.
 """
 
 from typing import cast
+
 import streamlit as st
 
 from frontend.config import MODEL_CONFIGURATIONS
@@ -45,12 +46,14 @@ def render_ribbon_indicator(task_id: str) -> None:
     if not isinstance(audit_metrics, dict):
         return
 
-    payload_task_id = audit_metrics.get("task_id") or audit_metrics.get("metadata", {}).get("task_id")
+    metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
+    meta_task_id = metadata.get("task_id")
+    payload_task_id = audit_metrics.get("task_id") or meta_task_id
     if str(payload_task_id) != str(task_id):
         return
 
-    metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
     kappa_score = cast(
+
         float,
         metadata.get("global_gwet_ac1") or metadata.get("global_gwets_ac1", 0.0),
     )

@@ -1,10 +1,13 @@
 """
-Side-by-side extraction hub: Verification Ledger (left) and Source Artifact Viewer (right).
-Answers are staged directly in Streamlit widget state under deterministic keys and committed
+Side-by-side extraction hub: Verification Ledger (left)
+and Source Artifact Viewer (right). Answers are staged directly
+in Streamlit widget state under deterministic keys and committed
 to the database atomically only when the user clicks "Save Changes".
 """
 
+
 import re
+from collections.abc import Callable
 from typing import cast
 
 import streamlit as st
@@ -88,8 +91,9 @@ def _commit_drafts_to_db(task_id: str, all_questions: list[str]) -> bool:
     return True
 
 
-def _make_focus_callback(question: str):
+def _make_focus_callback(question: str) -> Callable[[], None]:
     """Returns an on_change callback that records which field is active."""
+
 
     def _set_focus() -> None:
         st.session_state[_FOCUS_KEY] = question
@@ -216,7 +220,7 @@ def _inject_highlight(source_context: str, focus_term: str) -> str:
         return source_context
 
     escaped_term = re.escape(focus_term.strip())
-    highlight_tag = r'<mark style="background-color: rgba(255, 235, 59, 0.3);">'  # noqa: E501
+    highlight_tag = r'<mark style="background-color: rgba(255, 235, 59, 0.3);">'
     replacement = rf"{highlight_tag}\g<0></mark>"
     return re.sub(escaped_term, replacement, source_context, flags=re.IGNORECASE)
 
@@ -287,10 +291,11 @@ def render_extraction_hub(*, disabled: bool = False) -> None:
 
     left_col, right_col = st.columns([1, 1])
 
-    active_task_data = {
+    active_task_data: dict[str, object] = {
         "report": report_dict,
         "source_context": source_context or "",
     }
+
 
     with left_col:
         _render_verification_ledger(
