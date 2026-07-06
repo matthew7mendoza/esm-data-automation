@@ -22,6 +22,8 @@ from frontend.services import send_audit_request, send_generation_request
 __all__ = ["main"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
+OVERVIEW_PAGE: Final[str] = "overview"
+
 
 
 def _initialize_session_state() -> None:
@@ -194,7 +196,7 @@ def _render_overview_page() -> None:
     st.write("Overview text placeholder.")
 
 def _render_step_one_upload(
-    *, disabled: bool, templates: list[str], models: list[str]
+    *, disabled: bool, target_document: str, models: list[str]
 ) -> str:
     """
     Renders the sidebar settings and step 1 upload form
@@ -344,7 +346,7 @@ def _render_step_three_download(
 
 
 def _render_generator_tab(
-    *, is_running: bool, templates: list[str], models: list[str]
+    *, is_running: bool, target_document: str, models: list[str]
 ) -> None:
     """
     Renders document filling process,
@@ -545,6 +547,15 @@ def main() -> None:
 
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
+
+    selected_page: str = _render_sidebar_navigation(
+        disabled=is_running,
+        templates=available_templates,
+    )
+
+    if selected_page == OVERVIEW_PAGE:
+        _render_overview_page()
+        return
 
     tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
 
