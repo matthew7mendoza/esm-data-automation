@@ -93,6 +93,8 @@ class ItemAuditStream:
                 calculate_reasoning_stability(self.justifications, self.strategy), 2
             ),
             "raw_dict_distribution": Counter(self.verdicts),
+            "raw_verdict_array": self.verdicts,
+            "raw_justification_array": self.justifications,
         }
 
 
@@ -103,6 +105,8 @@ class QuestionRealiabilityMetrics(TypedDict):
     gwets_ac1_gamma: float
     reasoning_stability_r_stab: float
     raw_dict_distribution: Counter[str]
+    raw_verdict_array: list[str]
+    raw_justification_array: list[str]
 
 
 class AuditReportMetadata(TypedDict):
