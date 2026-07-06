@@ -38,6 +38,7 @@ def _initialize_session_state() -> None:
         "current_task_custom_name": None,
         "historical_audits": {},
         "run_state": "idle",
+        "app_mode": "Extraction Hub",
     }
 
     for key, value in defaults.items():
@@ -501,20 +502,28 @@ def main() -> None:
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
 
-    tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
+    active_mode: str = str(st.session_state.get("app_mode", "Extraction Hub"))
 
-    with tab_generator:
+    if active_mode == "Extraction Hub":
         _render_generator_tab(
             is_running=is_running,
             templates=available_templates,
             models=available_models,
         )
+        return
 
-    with tab_judge:
-        _render_judge_tab(
-            disabled=is_running,
-            models=available_models,
-        )
+    if active_mode == "Template Architect":
+        st.write("View Placeholder")
+        return
+
+    if active_mode == "Pipeline Insights":
+        st.write("View Placeholder")
+        return
+
+    _render_judge_tab(
+        disabled=is_running,
+        models=available_models,
+    )
 
     if st.session_state.get("run_state") == "executing":
         st.rerun()

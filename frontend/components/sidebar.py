@@ -150,11 +150,25 @@ def _delete_historical_task(task_id: str) -> bool:
     return True
 
 
+_APP_MODES: Final[list[str]] = [
+    "Extraction Hub",
+    "Template Architect",
+    "Pipeline Insights",
+]
+
+
 def render_historical_sidebar() -> None:
     """
     Fetches the history of completed tasks and displays
     them on the sidebar dropdown so users can scroll through past runs.
     """
+    st.sidebar.segmented_control(
+        "Navigation",
+        options=_APP_MODES,
+        key="app_mode",
+    )
+    st.sidebar.markdown("---")
+
     past_tasks = _fetch_past_tasks_raw()
     if past_tasks is None:
         return
