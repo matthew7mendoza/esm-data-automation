@@ -10,13 +10,12 @@ are consistent or not.
 import re
 from collections import Counter
 from collections.abc import Callable
-from typing import Any, Literal
+from typing import Literal
 
 __all__ = [
     "calculate_gwets_ac1",
     "calculate_percentage_agreement",
     "calculate_reasoning_stability",
-    "extract_performance_metrics",
 ]
 
 
@@ -107,61 +106,3 @@ def calculate_reasoning_stability(
     cluster_counts = Counter(fingerprints)
     dominant_cluster_size = cluster_counts.most_common(1)[0][1]
     return (dominant_cluster_size / total_runs) * 100.0
-
-
-def extract_performance_metrics(api_tasks: list[dict[str, Any]]) -> dict[str, float | int]:
-    """
-    Aggregates performance metrics over time by parsing a raw list of dictionary tasks
-    fetched from the API task log. Extracts total documents processed, average script speeds,
-    historical stability drift, and field validation fill rates.
-    """
-    import json
-
-    total_records = 0
-    script_speeds = []
-    stability_scores = []
-    fields_filled = 0
-    total_fields = 0
-
-    for task in api_tasks:
-        source_context = task.get("source_context") or ""
-        total_records += source_context.count("--- SOURCE CONTENT ASSET:")
-
-        try:
-            report = json.loads(task.get("report_json") or "{}")
-        except json.JSONDecodeError:
-            continue
-            
-        if not report:
-            continue
-
-        speed = report.get("duration", report.get("process_latency"))
-        if speed is not None:
-            script_speeds.append(speed)
-
-        stability = report.get(
-            "consensus_index",
-            report.get(
-                "gwets_ac1_gamma",
-                report.get("metadata", {}).get("global_gwets_ac1")
-            )
-        )
-        if stability is not None:
-            stability_scores.append(stability)
-
-        answered_count = len(report.get("extracted_answers", {}))
-        missing_count = len(report.get("missing_information", []))
-        
-        fields_filled += answered_count
-        total_fields += answered_count + missing_count
-
-    avg_speed = sum(script_speeds) / len(script_speeds) if script_speeds else 1.25
-    agreement = sum(stability_scores) / len(stability_scores) if stability_scores else 0.0
-    fill_rate = (fields_filled / total_fields) if total_fields else 0.0
-
-    return {
-        "total_documents_processed": total_records,
-        "average_extraction_duration": avg_speed,
-        "system_agreement_integrity": agreement,
-        "data_completeness_ratio": fill_rate,
-    }

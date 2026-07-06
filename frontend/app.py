@@ -1,5 +1,5 @@
 """
-Primary streamlit rendering — single linear 3-step pipeline.
+Primary streamlit rendering
 """
 
 import io
@@ -9,8 +9,11 @@ from typing import Final, cast
 import streamlit as st
 from docx import Document
 
-from frontend.api import fetch_server_templates
-from frontend.components.extraction_hub import render_extraction_hub
+from frontend.api import fetch_all_historical_tasks, fetch_server_templates
+from frontend.components.results import (
+    render_answers_and_missing_sections,
+    render_trust_audit_ledger,
+)
 from frontend.components.sidebar import render_historical_sidebar
 from frontend.config import MODEL_CONFIGURATIONS
 from frontend.protocols import UploadedFileProtocol
@@ -20,20 +23,10 @@ __all__ = ["main"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 
-# 4-step progress milestones mirroring batch_queue labels
-_PIPELINE_MILESTONES: Final[list[str]] = [
-    "Reading Files…",
-    "LLM Extraction…",
-    "Validation…",
-    "Completed",
-]
-
 
 def _initialize_session_state() -> None:
     """
-    Set up core streamlit session with explicit mutation.
-    `is_processing` is the canonical mutual-exclusion guard that freezes
-    the entire widget canvas while the backend pipeline executes.
+    Set up core streamlit session with explicit mutation
     """
 
     defaults: dict[str, bool | dict[str, object] | str | None] = {
@@ -41,12 +34,10 @@ def _initialize_session_state() -> None:
         "source_context": None,
         "audit_metrics": None,
         "job_running": False,
-        "is_processing": False,
         "current_task_id": None,
         "current_task_custom_name": None,
         "historical_audits": {},
         "run_state": "idle",
-        "pipeline_step": 0,
     }
 
     for key, value in defaults.items():
@@ -66,7 +57,6 @@ def _handle_pending_generation(generation_args: object) -> None:
         custom_name=cast(str, generation_args.get("custom_name", "")),
     )
     st.session_state.job_running = False
-    st.session_state.pipeline_step = 4
     st.rerun()
 
 
@@ -82,7 +72,6 @@ def _handle_pending_audit(audit_args: object) -> None:
         source_context=cast(str, args_copy.get("source_context", "")),
     )
     if metrics:
-        metrics["task_id"] = task_id
         st.session_state.audit_metrics = metrics
         historical_audits = st.session_state.get("historical_audits")
         if not isinstance(historical_audits, dict):
@@ -109,7 +98,8 @@ def _should_execute_pending_job() -> bool:
 
 def _process_pending_jobs() -> None:
     """
-    Executes queued background tasks then refreshes the app.
+    Executes queded background tasks
+    then refreshes the app
     """
 
     if not _should_execute_pending_job():
@@ -127,7 +117,7 @@ def _process_pending_jobs() -> None:
 def _purge_workspace_heap() -> None:
     """
     Removes active tracking keys to reset the UI
-    to baseline so things don't get messy.
+    to baseline so things don't get messy
     """
 
     transient_keys: list[str] = [
@@ -139,7 +129,6 @@ def _purge_workspace_heap() -> None:
     ]
     for key in transient_keys:
         st.session_state.pop(key, None)
-    st.session_state.pipeline_step = 0
 
 
 def _render_workspace_cleaner() -> None:
@@ -159,53 +148,31 @@ def _render_workspace_cleaner() -> None:
         st.rerun()
 
 
-def _render_sidebar_config(
-    *, templates: list[str], models: list[str]
-) -> tuple[str, str]:
-    """
-    Declarative sidebar manager for all data ingestion options and
-    configuration selectors. Bundled inside a collapsible expander so
-    the sidebar remains compact. Isolated from the global canvas so it
-    stays stable while results are displayed.
-    """
-
-    is_locked: bool = bool(st.session_state.get("is_processing"))
-
-    with st.sidebar:
-        st.title("Run Configuration")
-        st.markdown("---")
-
-        with st.expander("⚙️ Model & Template", expanded=True):
-            chosen_engine: str = st.selectbox(
-                "Select AI Model",
-                models,
-                disabled=is_locked,
-                key="step1_model",
-            )
-
-            target_document: str = st.selectbox(
-                "Choose a form template to fill out",
-                templates,
-                disabled=is_locked,
-                key="step1_template",
-            )
-
-    return cast(str, chosen_engine), cast(str, target_document)
-
-
 def _render_step_one_upload(
-    *,
-    disabled: bool,
-    chosen_engine: str,
-    target_document: str,
-) -> None:
+    *, disabled: bool, templates: list[str], models: list[str]
+) -> str:
     """
-    Step 1: file uploader and the primary action button.
-    Configuration dropdowns live in the sidebar (see _render_sidebar_config).
+    Renders the sidebar settings and step 1 upload form
     """
+
+    st.sidebar.header("Settings")
+
+    chosen_engine: str = st.sidebar.selectbox(
+        "Select AI Model",
+        models,
+        disabled=disabled,
+    )
+
+    target_document: str = st.sidebar.selectbox(
+        "Chose a form template to fill out",
+        templates,
+        disabled=disabled,
+    )
+
+    st.header(f"1. Generate {target_document}")
 
     uploaded_files = st.file_uploader(
-        "Drop your scientific data, READMEs, publications, etc. here:",
+        "Drop your scientific data, READMEs, publications, ect... here:",
         accept_multiple_files=True,
         disabled=disabled,
     )
@@ -216,18 +183,13 @@ def _render_step_one_upload(
         disabled=disabled,
     )
 
-    submit_ready: bool = bool(uploaded_files) and not disabled
     if st.button(
         "Read Files & Write Answers",
         type="primary",
-        disabled=not submit_ready,
+        disabled=not uploaded_files or disabled,
     ):
-        # Phase 3: flip the lock first so the next render sees a frozen canvas,
-        # then queue all deferred-execution state before the rerun.
-        st.session_state.is_processing = True
         st.session_state.job_running = True
         st.session_state.run_state = "triggered"
-        st.session_state.pipeline_step = 1
         st.session_state.pending_generation = {
             "target_document": target_document,
             "chosen_engine": chosen_engine,
@@ -235,31 +197,14 @@ def _render_step_one_upload(
             "custom_name": custom_name,
         }
         st.rerun()
-
-
-def _render_step_two_progress() -> None:
-    """
-    Step 2a: live progress bar shown while job_running is True.
-    Cycles through the 4 pipeline milestones on each rerun.
-    """
-
-    pipeline_step: int = int(st.session_state.get("pipeline_step", 1))
-    clamped_step = max(1, min(pipeline_step, len(_PIPELINE_MILESTONES)))
-    progress_val = clamped_step / len(_PIPELINE_MILESTONES)
-    label = _PIPELINE_MILESTONES[clamped_step - 1]
-
-    st.progress(progress_val, text=f"**{label}**")
-
-    # Advance the displayed milestone each rerun while the job runs
-    next_step = clamped_step + 1 if clamped_step < len(_PIPELINE_MILESTONES) else clamped_step
-    st.session_state.pipeline_step = next_step
+    return target_document
 
 
 def _build_final_document_string(
     *, extracted_answers: dict[str, str], missing_questions: list[str]
 ) -> str:
     """
-    Aggregates text chunks.
+    Aggregates text chunks
     """
 
     document_blocks: list[str] = ["# Final Extracted Document\n\n"]
@@ -307,9 +252,7 @@ def _render_step_three_download(
     disabled: bool,
 ) -> None:
     """
-    Provides the final aggregated document for download.
-    The `disabled` flag is bound to `is_processing` so download controls
-    are frozen during active pipeline execution.
+    Provides the final aggregated document for download
     """
 
     st.header("3. Download Final Document")
@@ -355,12 +298,107 @@ def _render_step_three_download(
         )
 
 
-def _render_audit_dataframe(audit_metrics: dict[str, object]) -> None:
+def _render_generator_tab(
+    *, is_running: bool, templates: list[str], models: list[str]
+) -> None:
     """
-    Renders the LLM Judge results dataframe inline below the extraction hub.
+    Renders document filling process,
+    the three step process
     """
+
+    target_document: str = _render_step_one_upload(
+        disabled=is_running,
+        templates=templates,
+        models=models,
+    )
+
+    report = cast(dict[str, object] | None, st.session_state.get("generator_report"))
+    if not report:
+        return
+
+    render_answers_and_missing_sections(disabled=is_running)
     st.markdown("---")
-    st.subheader("LLM Judge — Run Snapshot")
+
+    missing_question: list[str] = cast(
+        list[str], report.get("missing_information", [])
+    )
+    extracted_answers: dict[str, str] = cast(
+        dict[str, str], report.get("extracted_answers", {})
+    )
+
+    _render_step_three_download(
+        target_document=target_document,
+        extracted=extracted_answers,
+        missing=missing_question,
+        disabled=is_running,
+    )
+
+    audit_metrics = cast(
+        dict[str, object] | None, st.session_state.get("audit_metrics")
+    )
+    if not audit_metrics:
+        return
+
+    st.markdown("---")
+    st.subheader("Complete run snapshot")
+    metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
+    kappa_score = cast(
+        float,
+        metadata.get("global_gwet_ac1") or metadata.get("global_gwets_ac1", 0.0),
+    )
+
+    st.metric("Agreement score (Gwet's AC1)", f"{kappa_score:.3f}")
+    st.dataframe(
+        cast(list[object], audit_metrics.get("item_level_stability_metrics", [])),
+        use_container_width=True,
+    )
+
+
+def _get_currently_active_task(
+    historical_tasks: list[dict[str, object]], task_id: str | None
+) -> dict[str, object] | None:
+    if not task_id:
+        return None
+    for task in historical_tasks:
+        if (
+            task.get("status") == "COMPLETED"
+            and task.get("report") is not None
+            and str(task.get("task_id")) == str(task_id)
+        ):
+            return task
+    return None
+
+
+def _trigger_stability_test(
+    task_id: str,
+    active_task_data: dict[str, object],
+    chosen_engine: str,
+    judge_iterations: int,
+) -> None:
+    report_data = active_task_data.get("report") or {}
+    extracted_answers_dict = (
+        report_data.get("extracted_answers", {})
+        if isinstance(report_data, dict)
+        else {}
+    )
+
+    st.session_state.job_running = True
+    st.session_state.run_state = "triggered"
+    st.session_state.pending_audit = {
+        "task_id": task_id,
+        "chosen_engine": chosen_engine,
+        "judge_iterations": judge_iterations,
+        "answers": extracted_answers_dict,
+        "source_context": active_task_data.get("source_context", ""),
+    }
+    st.rerun()
+
+
+def _render_audit_results(audit_metrics: dict[str, object] | None) -> None:
+    if not audit_metrics:
+        return
+    st.markdown("---")
+    st.success("Audit complete!")
 
     metadata = cast(dict[str, object], audit_metrics.get("metadata", {}))
     kappa_score = cast(
@@ -375,92 +413,111 @@ def _render_audit_dataframe(audit_metrics: dict[str, object]) -> None:
     )
 
 
+def _render_judge_tab(*, disabled: bool, models: list[str]) -> None:
+    """
+    Renders the LLM Judge tab using the globally selected active run.
+    """
+
+    st.header("LLM Judge: Evaluate Historical Extraction")
+    st.markdown(
+        "Quantify the extraction accuracy of a past run against its "
+        "original source context."
+    )
+
+    historical_tasks: list[dict[str, object]] = fetch_all_historical_tasks()
+    currently_selected_task_id: str | None = st.session_state.get("current_task_id")
+    currently_active_task_data = _get_currently_active_task(
+        historical_tasks, currently_selected_task_id
+    )
+
+    if not currently_active_task_data:
+        st.info(
+            "Please upload files under the 'Document Generator' tab or "
+            "select a past run from the sidebar to evaluate."
+        )
+        return
+
+    # Inform the user which run is currently active and under evaluation
+    active_run_custom_name = (
+        currently_active_task_data.get("custom_name") or "Unnamed Run"
+    )
+    st.success(
+        "Evaluating Active Run: "
+        f"**{active_run_custom_name}** (ID: `{str(currently_selected_task_id)[:8]}`)"
+    )
+
+    chosen_engine: str = st.selectbox(
+        "Select Evaluating AI Judge", models, disabled=disabled
+    )
+
+    judge_iterations: int = st.slider(
+        "Testing Iterations (Higher = more accurate but much slower!)",
+        min_value=2,
+        max_value=10,
+        value=3,
+        disabled=disabled,
+    )
+
+    st.markdown("#### Original Source Documents Under Review")
+    render_trust_audit_ledger(
+        source_context=cast(
+            str | None, currently_active_task_data.get("source_context")
+        )
+    )
+
+    if st.button("Run Stability Test", type="primary", disabled=disabled):
+        _trigger_stability_test(
+            cast(str, currently_selected_task_id),
+            currently_active_task_data,
+            chosen_engine,
+            judge_iterations,
+        )
+
+    audit_metrics = cast(
+        dict[str, object] | None, st.session_state.get("audit_metrics")
+    )
+    _render_audit_results(audit_metrics)
+
+
 def main() -> None:
     """
-    Main control flow — single linear 3-step pipeline.
-    Widget interlock is driven exclusively by `is_processing` so there is
-    a single source of truth for the frozen-canvas invariant.
+    Main control flow
     """
 
     st.set_page_config(page_title="ESM Data Automation", layout="wide")
     st.title("ESM Data Automation Pipeline")
 
     _initialize_session_state()
+    _process_pending_jobs()
+    _render_workspace_cleaner()
 
-    # Phase 3: defensive boundary around the entire pending-job dispatcher.
-    try:
-        with st.spinner("Executing data automation pipeline..."):
-            _process_pending_jobs()
-    except ValueError as ve:
-        st.error(f"Data format mismatch: {ve}")
-    except Exception as e:
-        st.error(f"Pipeline Interrupted: {str(e)}")
-    finally:
-        # Only release the lock if a job that set it has finished running.
-        job_still_running: bool = bool(st.session_state.get("job_running"))
-        if not job_still_running:
-            st.session_state.is_processing = False
-
-    is_processing: bool = bool(st.session_state.get("is_processing"))
     is_running: bool = bool(st.session_state.get("job_running"))
+
+    if is_running:
+        st.warning("Active AI job currently running...")
+
+    render_historical_sidebar()
 
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
 
-    # Sidebar: isolated Run Configuration panel + historical navigation.
-    chosen_engine, target_document = _render_sidebar_config(
-        templates=available_templates,
-        models=available_models,
-    )
-    render_historical_sidebar()
-    _render_workspace_cleaner()
+    tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
 
-    # ── Step 1 ────────────────────────────────────────────────────────────────
-    st.header("1. Configure & Upload")
-    _render_step_one_upload(
-        disabled=is_processing,
-        chosen_engine=chosen_engine,
-        target_document=target_document,
-    )
+    with tab_generator:
+        _render_generator_tab(
+            is_running=is_running,
+            templates=available_templates,
+            models=available_models,
+        )
 
-    # ── Step 2 ────────────────────────────────────────────────────────────────
-    if is_running:
-        st.markdown("---")
-        st.header("2. Processing…")
-        _render_step_two_progress()
+    with tab_judge:
+        _render_judge_tab(
+            disabled=is_running,
+            models=available_models,
+        )
 
-        if st.session_state.get("run_state") == "executing":
-            st.rerun()
-        return
-
-    report = cast(dict[str, object] | None, st.session_state.get("generator_report"))
-    if not report:
-        return
-
-    render_extraction_hub(disabled=is_processing)
-
-    audit_metrics = cast(
-        dict[str, object] | None, st.session_state.get("audit_metrics")
-    )
-    if audit_metrics:
-        _render_audit_dataframe(audit_metrics)
-
-    # ── Step 3 ────────────────────────────────────────────────────────────────
-    st.markdown("---")
-
-    missing_questions: list[str] = cast(
-        list[str], report.get("missing_information", [])
-    )
-    extracted_answers: dict[str, str] = cast(
-        dict[str, str], report.get("extracted_answers", {})
-    )
-
-    _render_step_three_download(
-        target_document=target_document,
-        extracted=extracted_answers,
-        missing=missing_questions,
-        disabled=is_processing,
-    )
+    if st.session_state.get("run_state") == "executing":
+        st.rerun()
 
 
 if __name__ == "__main__":

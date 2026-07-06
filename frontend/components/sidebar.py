@@ -46,11 +46,7 @@ def _update_session_state_with_task(
         st.session_state.audit_metrics = None
         return
 
-    metrics = historical_audit_records.get(task_id)
-    if isinstance(metrics, dict):
-        metrics["task_id"] = task_id
-
-    st.session_state.audit_metrics = metrics
+    st.session_state.audit_metrics = historical_audit_records.get(task_id)
 
 
 def _purge_active_view() -> None:
@@ -159,7 +155,6 @@ def render_historical_sidebar() -> None:
     Fetches the history of completed tasks and displays
     them on the sidebar dropdown so users can scroll through past runs.
     """
-
     past_tasks = _fetch_past_tasks_raw()
     if past_tasks is None:
         return
@@ -198,7 +193,7 @@ def render_historical_sidebar() -> None:
         options=available_selection_options_list,
         key="history_selectbox",
         on_change=_on_history_change,
-        disabled=st.session_state.get("is_processing", False),
+        disabled=st.session_state.get("job_running", False),
     )
 
     _render_historical_deletion(currently_active_task_id)
@@ -212,7 +207,7 @@ def _render_historical_deletion(currently_active_task_id: str | None) -> None:
     delete_clicked = st.sidebar.button(
         "Delete This Run",
         type="primary",
-        disabled=st.session_state.get("is_processing", False),
+        disabled=st.session_state.get("job_running", False),
     )
     if delete_clicked:
         st.session_state.show_delete_confirmation = True

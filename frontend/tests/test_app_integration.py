@@ -24,5 +24,6 @@ class TestStreamlitAppIntegration:
         assert "run_state" in at.session_state
         assert at.session_state["run_state"] == "idle"
         assert at.session_state["job_running"] is False
-        assert at.session_state["app_mode"] == "Extraction Hub"
-
+        assert len(at.tabs) == 2
+        assert "Document Generator" in at.tabs[0].label
+        assert "LLM Judge Evaluation" in at.tabs[1].label

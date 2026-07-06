@@ -1,0 +1,20 @@
+[33mce9a20d[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m attempt to fix UI state, bundle configurations in frontend ui
+[33mf15550d[m simplify frontend experience
+[33m4e2744e[m improve type hint, exceptions, flatten code
+[33m8b000f5[m fix metrics extraction (LLM-Judge) and clean up code
+[33mf2381f6[m add dashboard for templates
+[33m2dbc993[m Fixed the slow review screen and made sure data updates properly when changing files
+[33m53ac27b[m Added the side-by-side review screen with document viewer and a single save button
+[33m75f53b0[m add app_mode routing and sidebar navigation control
+[33mebb5d86[m remove redundant file
+[33m0484ce2[m allow deleting runs
+[33m8947524[m flatten code
+[33me9a6154[m resolve ruff lint & mypy typing errors
+[33m4e0c0bb[m add ruff & update UI frontend
+[33m98d7933[m fix judge llm api error and sync past runs selection
+[33m1a6e559[m fix template review, add dynamic file downloads
+[33mda5bfa0[m docx pedendancy, package upgrades
+[33m6652a1b[m readability and stricter typehints
+[33m1c4902b[m refactor test
+[33m5ee82bc[m pytest change #2
+[33m211fc7d[m pytest implementation
