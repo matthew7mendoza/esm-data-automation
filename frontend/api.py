@@ -9,7 +9,7 @@ from typing import Final, cast
 import requests
 
 from backend.esm_data.models import TaskId
-from frontend.config import BACKEND_URL
+from frontend.config import BACKEND_URL, TEMPLATE_SORT_ORDER
 from frontend.protocols import TaskProfileDict
 
 __all__ = ["fetch_server_templates", "get_task_profile", "fetch_all_historical_tasks", "update_task_report"]
@@ -23,16 +23,24 @@ def fetch_server_templates() -> list[str]:
     """
 
     try:
-        response = requests.get(f"{BACKEND_URL}/api/templates", timeout=5)  
+        response = requests.get(f"{BACKEND_URL}/api/templates", timeout=5)
     except requests.exceptions.RequestException as error:
         logger.warning(f"Unable to fetch templates from worker program: {error}")
-        return ["DMP", "README"]
-    
+        return list(TEMPLATE_SORT_ORDER)
+
     if response.status_code != 200:
         logger.warning(f"Backend returned unexpected status: {response.status_code}")
-        return ["DMP", "README"]
-    
-    return cast(list[str], response.json())
+        return list(TEMPLATE_SORT_ORDER)
+
+    templates = cast(list[str], response.json())
+    return sorted(
+        templates,
+        key=lambda name: (
+            TEMPLATE_SORT_ORDER.index(name)
+            if name in TEMPLATE_SORT_ORDER
+            else len(TEMPLATE_SORT_ORDER)
+        ),
+    )
 
 def get_task_profile(*, task_id: TaskId) -> TaskProfileDict | None:
     """
