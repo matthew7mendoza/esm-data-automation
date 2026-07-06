@@ -198,7 +198,7 @@ def render_historical_sidebar() -> None:
         options=available_selection_options_list,
         key="history_selectbox",
         on_change=_on_history_change,
-        disabled=st.session_state.get("job_running", False),
+        disabled=st.session_state.get("is_processing", False),
     )
 
     _render_historical_deletion(currently_active_task_id)
@@ -212,7 +212,7 @@ def _render_historical_deletion(currently_active_task_id: str | None) -> None:
     delete_clicked = st.sidebar.button(
         "Delete This Run",
         type="primary",
-        disabled=st.session_state.get("job_running", False),
+        disabled=st.session_state.get("is_processing", False),
     )
     if delete_clicked:
         st.session_state.show_delete_confirmation = True

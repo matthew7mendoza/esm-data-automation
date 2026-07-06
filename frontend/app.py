@@ -31,7 +31,9 @@ _PIPELINE_MILESTONES: Final[list[str]] = [
 
 def _initialize_session_state() -> None:
     """
-    Set up core streamlit session with explicit mutation
+    Set up core streamlit session with explicit mutation.
+    `is_processing` is the canonical mutual-exclusion guard that freezes
+    the entire widget canvas while the backend pipeline executes.
     """
 
     defaults: dict[str, bool | dict[str, object] | str | None] = {
@@ -39,6 +41,7 @@ def _initialize_session_state() -> None:
         "source_context": None,
         "audit_metrics": None,
         "job_running": False,
+        "is_processing": False,
         "current_task_id": None,
         "current_task_custom_name": None,
         "historical_audits": {},
@@ -156,28 +159,50 @@ def _render_workspace_cleaner() -> None:
         st.rerun()
 
 
+def _render_sidebar_config(
+    *, templates: list[str], models: list[str]
+) -> tuple[str, str]:
+    """
+    Declarative sidebar manager for all data ingestion options and
+    configuration selectors. Bundled inside a collapsible expander so
+    the sidebar remains compact. Isolated from the global canvas so it
+    stays stable while results are displayed.
+    """
+
+    is_locked: bool = bool(st.session_state.get("is_processing"))
+
+    with st.sidebar:
+        st.title("Run Configuration")
+        st.markdown("---")
+
+        with st.expander("⚙️ Model & Template", expanded=True):
+            chosen_engine: str = st.selectbox(
+                "Select AI Model",
+                models,
+                disabled=is_locked,
+                key="step1_model",
+            )
+
+            target_document: str = st.selectbox(
+                "Choose a form template to fill out",
+                templates,
+                disabled=is_locked,
+                key="step1_template",
+            )
+
+    return cast(str, chosen_engine), cast(str, target_document)
+
+
 def _render_step_one_upload(
-    *, disabled: bool, templates: list[str], models: list[str]
-) -> str:
+    *,
+    disabled: bool,
+    chosen_engine: str,
+    target_document: str,
+) -> None:
     """
-    Step 1: template/model dropdowns inside an expander, file uploader,
-    and the primary action button.
+    Step 1: file uploader and the primary action button.
+    Configuration dropdowns live in the sidebar (see _render_sidebar_config).
     """
-
-    with st.expander("⚙️ Configuration", expanded=not disabled):
-        chosen_engine: str = st.selectbox(
-            "Select AI Model",
-            models,
-            disabled=disabled,
-            key="step1_model",
-        )
-
-        target_document: str = st.selectbox(
-            "Choose a form template to fill out",
-            templates,
-            disabled=disabled,
-            key="step1_template",
-        )
 
     uploaded_files = st.file_uploader(
         "Drop your scientific data, READMEs, publications, etc. here:",
@@ -191,11 +216,15 @@ def _render_step_one_upload(
         disabled=disabled,
     )
 
+    submit_ready: bool = bool(uploaded_files) and not disabled
     if st.button(
         "Read Files & Write Answers",
         type="primary",
-        disabled=not uploaded_files or disabled,
+        disabled=not submit_ready,
     ):
+        # Phase 3: flip the lock first so the next render sees a frozen canvas,
+        # then queue all deferred-execution state before the rerun.
+        st.session_state.is_processing = True
         st.session_state.job_running = True
         st.session_state.run_state = "triggered"
         st.session_state.pipeline_step = 1
@@ -206,8 +235,6 @@ def _render_step_one_upload(
             "custom_name": custom_name,
         }
         st.rerun()
-
-    return cast(str, st.session_state.get("step1_template", templates[0] if templates else ""))
 
 
 def _render_step_two_progress() -> None:
@@ -281,6 +308,8 @@ def _render_step_three_download(
 ) -> None:
     """
     Provides the final aggregated document for download.
+    The `disabled` flag is bound to `is_processing` so download controls
+    are frozen during active pipeline execution.
     """
 
     st.header("3. Download Final Document")
@@ -349,28 +378,49 @@ def _render_audit_dataframe(audit_metrics: dict[str, object]) -> None:
 def main() -> None:
     """
     Main control flow — single linear 3-step pipeline.
+    Widget interlock is driven exclusively by `is_processing` so there is
+    a single source of truth for the frozen-canvas invariant.
     """
 
     st.set_page_config(page_title="ESM Data Automation", layout="wide")
     st.title("ESM Data Automation Pipeline")
 
     _initialize_session_state()
-    _process_pending_jobs()
 
+    # Phase 3: defensive boundary around the entire pending-job dispatcher.
+    try:
+        with st.spinner("Executing data automation pipeline..."):
+            _process_pending_jobs()
+    except ValueError as ve:
+        st.error(f"Data format mismatch: {ve}")
+    except Exception as e:
+        st.error(f"Pipeline Interrupted: {str(e)}")
+    finally:
+        # Only release the lock if a job that set it has finished running.
+        job_still_running: bool = bool(st.session_state.get("job_running"))
+        if not job_still_running:
+            st.session_state.is_processing = False
+
+    is_processing: bool = bool(st.session_state.get("is_processing"))
     is_running: bool = bool(st.session_state.get("job_running"))
-
-    render_historical_sidebar()
-    _render_workspace_cleaner()
 
     available_templates: list[str] = fetch_server_templates()
     available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
 
-    # ── Step 1 ────────────────────────────────────────────────────────────────
-    st.header("1. Configure & Upload")
-    target_document = _render_step_one_upload(
-        disabled=is_running,
+    # Sidebar: isolated Run Configuration panel + historical navigation.
+    chosen_engine, target_document = _render_sidebar_config(
         templates=available_templates,
         models=available_models,
+    )
+    render_historical_sidebar()
+    _render_workspace_cleaner()
+
+    # ── Step 1 ────────────────────────────────────────────────────────────────
+    st.header("1. Configure & Upload")
+    _render_step_one_upload(
+        disabled=is_processing,
+        chosen_engine=chosen_engine,
+        target_document=target_document,
     )
 
     # ── Step 2 ────────────────────────────────────────────────────────────────
@@ -387,7 +437,7 @@ def main() -> None:
     if not report:
         return
 
-    render_extraction_hub(disabled=is_running)
+    render_extraction_hub(disabled=is_processing)
 
     audit_metrics = cast(
         dict[str, object] | None, st.session_state.get("audit_metrics")
@@ -409,7 +459,7 @@ def main() -> None:
         target_document=target_document,
         extracted=extracted_answers,
         missing=missing_questions,
-        disabled=is_running,
+        disabled=is_processing,
     )
 
 

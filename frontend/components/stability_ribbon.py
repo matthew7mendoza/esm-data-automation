@@ -28,6 +28,7 @@ def trigger_stability_test(
     if not isinstance(source_context, str):
         source_context = ""
 
+    st.session_state.is_processing = True
     st.session_state.job_running = True
     st.session_state.run_state = "triggered"
     st.session_state.pending_audit = {
@@ -74,10 +75,12 @@ def render_judge_settings_expander(
     disabled: bool,
 ) -> None:
     """Renders the settings and action button inside the expander."""
+    is_processing: bool = st.session_state.get("is_processing", False)
+
     chosen_engine = st.selectbox(
         "Select Evaluating AI Judge",
         models,
-        disabled=disabled,
+        disabled=is_processing,
         key=f"judge_engine_{task_id}",
     )
     judge_iterations = st.slider(
@@ -85,14 +88,14 @@ def render_judge_settings_expander(
         min_value=2,
         max_value=10,
         value=3,
-        disabled=disabled,
+        disabled=is_processing,
         key=f"judge_iter_{task_id}",
     )
 
     run_clicked = st.button(
         "Run Stability Test",
         type="primary",
-        disabled=disabled,
+        disabled=is_processing,
         key=f"run_stability_{task_id}",
     )
 
