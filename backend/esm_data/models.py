@@ -23,6 +23,7 @@ __all__ = [
     "RubricItemConfig",
     "SpearAutomationError",
     "SystemSettingsPayload",
+    "TaskRenameRequest",
     "TaskReportUpdateRequest",
     "TaskStatusResponse",
     "TemplateCreateRequest",
@@ -304,3 +305,14 @@ class TaskReportUpdateRequest(BaseModel):
     missing_information: list[str] = Field(
         ..., description="List of unanswered or missing questions."
     )
+
+
+class TaskRenameRequest(BaseModel):
+    """
+    Validates incoming JSON payload to rename a task
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    custom_name: str = Field(..., description="The new custom name for the task.")
+

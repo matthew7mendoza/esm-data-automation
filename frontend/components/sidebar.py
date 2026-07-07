@@ -185,6 +185,49 @@ def delete_historical_task(task_id: str) -> bool:
     return True
 
 
+def _send_rename_call(task_id: str, new_name: str) -> requests.Response | None:
+    try:
+        return requests.patch(
+            f"{BACKEND_URL}/api/tasks/{task_id}/rename",
+            json={"custom_name": new_name},
+            timeout=5,
+        )
+    except requests.exceptions.RequestException as err:
+        logger.error(f"Error renaming task {task_id}: {err}", exc_info=True)
+        st.error(f"Network error trying to rename run: {err}")
+        return None
+
+
+def rename_historical_task(task_id: str, new_name: str) -> bool:
+    response = _send_rename_call(task_id, new_name)
+    if not response:
+        return False
+
+    if response.status_code != 200:
+        st.error("Failed to rename task from backend database")
+        return False
+
+    st.toast("Run renamed successfully!")
+    return True
+
+
+def _on_rename_click(task_id: str | None) -> None:
+    if not task_id:
+        return
+
+    new_name = st.session_state.get("rename_input")
+    if not new_name:
+        return
+
+    success = rename_historical_task(task_id, str(new_name))
+    if not success:
+        return
+
+    st.session_state.current_task_custom_name = new_name
+    st.session_state.rename_input = ""
+
+
+
 def render_historical_sidebar() -> None:
     """
     Fetches the history of completed tasks and displays
@@ -255,3 +298,15 @@ def render_historical_sidebar() -> None:
         on_click=_on_delete_click,
         args=(currently_active_task_id,),
     )
+
+    if currently_active_task_id and not is_job_running:
+        with st.sidebar.expander("Rename Current Run"):
+            st.text_input("New Name", key="rename_input", label_visibility="collapsed")
+            st.button(
+                "Rename",
+                key="rename_btn",
+                use_container_width=True,
+                on_click=_on_rename_click,
+                args=(currently_active_task_id,),
+            )
+

@@ -40,6 +40,7 @@ from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import (
     AuditRequest,
     TaskId,
+    TaskRenameRequest,
     TaskReportUpdateRequest,
     TaskStatusResponse,
     TemplateCreateRequest,
@@ -205,6 +206,26 @@ async def update_task_report(
     session.add(task)
     await session.commit()
     return {"status": "SUCCESS", "message": "Task report successfully updated."}
+
+
+@app.patch("/api/tasks/{task_id}/rename", status_code=status.HTTP_200_OK)
+async def rename_task(
+    *,
+    task_id: TaskId,
+    payload: TaskRenameRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, str]:
+    """
+    Rename an existing task.
+    """
+    if not (task := await session.get(Task, task_id)):
+        raise HTTPException(status_code=404, detail="The requested job does not exist.")
+
+    task.custom_name = payload.custom_name
+    session.add(task)
+    await session.commit()
+    return {"status": "SUCCESS", "message": "Task renamed successfully."}
+
 
 
 @app.post("/api/templates", status_code=status.HTTP_201_CREATED)
