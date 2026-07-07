@@ -22,10 +22,29 @@ __all__ = [
     "NoveltyEntrySchema",
     "RubricItemConfig",
     "SpearAutomationError",
+    "SystemSettingsPayload",
     "TaskReportUpdateRequest",
     "TaskStatusResponse",
     "TemplateCreateRequest",
+    "TokenUsageMetricsResponse",
 ]
+
+
+class SystemSettingsPayload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    llm_temperature: float = Field(0.2, ge=0.0, le=1.0)
+    api_key_input: str = Field("")
+    generator_system_prompt: str = Field(...)
+    judge_system_prompt: str = Field(...)
+    database_endpoint: str = Field(...)
+
+
+class TokenUsageMetricsResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    total_tokens_consumed: int = Field(0, ge=0)
+
 
 TaskId = NewType("TaskId", str)
 ItemId = NewType("ItemId", str)

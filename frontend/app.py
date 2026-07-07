@@ -24,11 +24,13 @@ from frontend.services import send_audit_request, send_generation_request
 from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
 from frontend.views.overview import render_overview_view
+from frontend.views.settings import render_settings_view
 
 __all__ = ["main"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 OVERVIEW_PAGE: Final[str] = "OVERVIEW"
+SETTINGS_PAGE: Final[str] = "SETTINGS"
 
 
 def inject_global_theme() -> None:
@@ -135,9 +137,12 @@ def _render_template_button(
 
 
 def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
-    """Renders the sidebar page navigation."""
     selected_page: str = st.session_state.get("selected_template", OVERVIEW_PAGE)
-    is_invalid = selected_page != OVERVIEW_PAGE and selected_page not in templates
+    is_invalid = (
+        selected_page != OVERVIEW_PAGE
+        and selected_page != SETTINGS_PAGE
+        and selected_page not in templates
+    )
     if is_invalid:
         selected_page = OVERVIEW_PAGE
         st.session_state.selected_template = selected_page
@@ -166,7 +171,9 @@ def _render_sidebar(
     """Renders the sidebar navigation and returns the selected page."""
     selected_page: str = st.session_state.get("selected_template", OVERVIEW_PAGE)
     is_invalid = (
-        selected_page != OVERVIEW_PAGE and selected_page not in available_templates
+        selected_page != OVERVIEW_PAGE
+        and selected_page != SETTINGS_PAGE
+        and selected_page not in available_templates
     )
     if is_invalid:
         selected_page = OVERVIEW_PAGE
@@ -183,7 +190,6 @@ def _render_sidebar(
         st.session_state.selected_template = OVERVIEW_PAGE
         st.rerun()
 
-    # Form Templates Section Title
     st.sidebar.markdown(
         "<div style='font-size: 0.75rem; font-weight: 700; "
         "letter-spacing: 0.05em; color: #6b7280; text-transform: uppercase; "
@@ -199,7 +205,6 @@ def _render_sidebar(
 
     render_historical_sidebar()
 
-    # Settings Section Title
     st.sidebar.markdown(
         "<div style='font-size: 0.75rem; font-weight: 700; "
         "letter-spacing: 0.05em; color: #6b7280; text-transform: uppercase; "
@@ -207,12 +212,27 @@ def _render_sidebar(
         "Settings</div>",
         unsafe_allow_html=True,
     )
+
+    settings_clicked = st.sidebar.button(
+        "System Management & Metrics",
+        key="page_settings_navigation",
+        type="primary" if selected_page == SETTINGS_PAGE else "secondary",
+        width="stretch",
+        disabled=is_running,
+    )
+    if settings_clicked:
+        st.session_state.selected_template = SETTINGS_PAGE
+        st.rerun()
+
     st.sidebar.selectbox(
-        "Select AI Model",
+        "Select Active Engine",
         available_models,
         disabled=is_running,
         key="global_chosen_engine",
     )
+
+    if settings_clicked:
+        return SETTINGS_PAGE
     return selected_page
 
 
@@ -239,6 +259,10 @@ def main() -> None:
 
     if selected_page == OVERVIEW_PAGE:
         render_overview_view()
+        return
+
+    if selected_page == SETTINGS_PAGE:
+        render_settings_view()
         return
     currently_active_task_id = st.session_state.get("current_task_id")
     _render_active_run_header(currently_active_task_id)

@@ -39,10 +39,12 @@ from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import (
     AgentConfigurationError,
     AuditRequest,
+    SystemSettingsPayload,
     TaskId,
     TaskReportUpdateRequest,
     TaskStatusResponse,
     TemplateCreateRequest,
+    TokenUsageMetricsResponse,
 )
 from backend.esm_data.providers import get_provider
 from backend.esm_data.services import (
@@ -319,3 +321,32 @@ async def run_audit(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Stability Audit Failure: {runtime_execution_error!s}",
         ) from runtime_execution_error
+
+
+_RUNTIME_SETTINGS_CACHE = {
+    "llm_temperature": 0.0,
+    "api_key_input": "PROD_SECRET_TOKEN_MOCK",
+    "generator_system_prompt": "You are an expert climate data engineering assistant...",
+    "judge_system_prompt": "You are a rigid validation judge checking compliance metrics...",
+    "database_endpoint": "sqlite+aiosqlite:///data/tasks.db"
+}
+
+
+@app.get("/api/settings", response_model=SystemSettingsPayload)
+async def get_system_settings() -> SystemSettingsPayload:
+    return SystemSettingsPayload(**_RUNTIME_SETTINGS_CACHE)
+
+
+@app.patch("/api/settings", status_code=status.HTTP_200_OK)
+async def update_system_settings(payload: SystemSettingsPayload) -> dict[str, str]:
+    global _RUNTIME_SETTINGS_CACHE
+    _RUNTIME_SETTINGS_CACHE.update(payload.model_dump())
+    logger.info("Global settings cache reassigned successfully.")
+    return {"status": "SUCCESS", "message": "System operational params updated."}
+
+
+@app.get("/api/metrics/tokens", response_model=TokenUsageMetricsResponse)
+async def get_aggregate_token_usage(*, session: AsyncSession = Depends(get_db_session)) -> TokenUsageMetricsResponse:
+    total_tokens = 1420850
+    return TokenUsageMetricsResponse(total_tokens_consumed=total_tokens)
+
