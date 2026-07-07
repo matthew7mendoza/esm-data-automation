@@ -39,6 +39,9 @@ class PipelineSettings(BaseModel):
     generator_system_prompt: str = Field("")
     judge_system_prompt: str = Field("")
     database_endpoint: str = Field("sqlite+aiosqlite:///data/tasks.db")
+    global_chosen_engine: str = Field("gemini")
+    custom_key_name: str = Field("")
+    recognized_provider: str = Field("")
 
     def __str__(self) -> str:
         return f"PipelineSettings(temp={self.llm_temperature})"
@@ -101,6 +104,9 @@ class ConfigurationManager:
             "database_endpoint": os.environ.get(
                 "DATABASE_URL", "sqlite+aiosqlite:///data/tasks.db"
             ),
+            "global_chosen_engine": "gemini",
+            "custom_key_name": "",
+            "recognized_provider": "",
         }
 
         if not RUNTIME_SETTINGS_FILE.exists():
@@ -165,6 +171,9 @@ class ConfigurationManager:
             self._active_settings.judge_system_prompt = self._baselines[
                 "judge_prompt"
             ]
+            self._active_settings.global_chosen_engine = "gemini"
+            self._active_settings.custom_key_name = ""
+            self._active_settings.recognized_provider = ""
 
             if not RUNTIME_SETTINGS_FILE.exists():
                 return

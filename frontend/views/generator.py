@@ -7,7 +7,7 @@ from typing import cast
 import streamlit as st
 
 from frontend.components.results import render_answers_and_missing_sections
-from frontend.config import TEMPLATE_DESCRIPTIONS, TEMPLATE_DISPLAY_NAMES
+from frontend.ui_constants import TEMPLATE_DESCRIPTIONS, TEMPLATE_DISPLAY_NAMES
 from frontend.utils.document import build_final_document_string, create_docx_buffer
 
 __all__ = ["render_generator_tab_view"]

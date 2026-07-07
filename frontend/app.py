@@ -7,19 +7,19 @@ from typing import Final
 
 import streamlit as st
 
-from frontend.api import fetch_server_templates
+from frontend.client import fetch_server_templates
 from frontend.components.sidebar import (
     render_historical_sidebar,
-)
-from frontend.config import (
-    MODEL_CONFIGURATIONS,
-    TEMPLATE_DISPLAY_NAMES,
 )
 from frontend.protocols import (
     AuditArgsPayload,
     GenerationArgsPayload,
 )
 from frontend.services import send_audit_request, send_generation_request
+from frontend.ui_constants import (
+    MODEL_CONFIGURATIONS,
+    TEMPLATE_DISPLAY_NAMES,
+)
 from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
 from frontend.views.overview import render_overview_view

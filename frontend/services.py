@@ -9,9 +9,9 @@ import requests
 import streamlit as st
 
 from backend.esm_data.models import TaskId
-from frontend.api import get_task_profile
-from frontend.config import BACKEND_URL, MODEL_CONFIGURATIONS
+from frontend.client import get_task_profile
 from frontend.protocols import TaskProfileDict, UploadedFileProtocol
+from frontend.ui_constants import BACKEND_URL, MODEL_CONFIGURATIONS
 
 __all__ = ["send_audit_request", "send_generation_request"]
 
@@ -100,7 +100,7 @@ def send_generation_request(
 
     request_payload = {
         "target_doc": target_document,
-        "model_provider": MODEL_CONFIGURATIONS[chosen_engine],
+        "model_provider": MODEL_CONFIGURATIONS.get(chosen_engine, chosen_engine),
         "custom_name": custom_name,
     }
 
@@ -148,7 +148,9 @@ def send_audit_request(
         "iterations": judge_iterations,
     }
 
-    parameters = {"model_provider": MODEL_CONFIGURATIONS[chosen_engine]}
+    parameters = {
+        "model_provider": MODEL_CONFIGURATIONS.get(chosen_engine, chosen_engine)
+    }
 
     try:
         audit_response = requests.post(

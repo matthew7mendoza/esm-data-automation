@@ -6,7 +6,7 @@ from typing import cast
 
 import streamlit as st
 
-from frontend.api import fetch_all_historical_tasks
+from frontend.client import fetch_all_historical_tasks
 from frontend.components.results import render_trust_audit_ledger
 
 __all__ = ["render_judge_tab_view"]

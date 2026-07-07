@@ -42,11 +42,14 @@ class DocumentGenerator:
     instructions: str
     templates: dict[str, TemplateConfig]
 
-    def __init__(self, provider: LLMProvider) -> None:
+    def __init__(self, provider: LLMProvider, instructions: str | None = None) -> None:
         if not provider:
             raise ValueError("An active LLM provider must be present!")
         self.provider = provider
-        self.instructions, self.templates = self._load_configuration_blueprints()
+        default_instructions, self.templates = self._load_configuration_blueprints()
+        self.instructions = (
+            instructions if instructions is not None else default_instructions
+        )
 
     def __repr__(self) -> str:
         """technical output string"""

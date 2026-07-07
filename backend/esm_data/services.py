@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from backend.esm_data.config import settings_engine
 from backend.esm_data.database import async_session_creator
 from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
 from backend.esm_data.document import EXTRACTOR_MAP, extract_text
@@ -116,8 +117,19 @@ async def _perform_document_extraction(
             cpu_process_pool, _extract_context_cpu_worker, str(staging_path)
         )
 
-        provider_instance = get_provider(name=model_provider)
-        generator = DocumentGenerator(provider=provider_instance)
+        active_config = settings_engine.get_current()
+        provider_instance = get_provider(
+            name=model_provider,
+            api_key=active_config.api_key_input if active_config.api_key_input else None
+        )
+        generator = DocumentGenerator(
+            provider=provider_instance,
+            instructions=(
+                active_config.generator_system_prompt
+                if active_config.generator_system_prompt
+                else None
+            )
+        )
         report = await _run_extraction_thread(
             generator, target_questions, final_unified_context
         )

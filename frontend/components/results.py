@@ -7,7 +7,7 @@ from typing import Final
 
 import streamlit as st
 
-from frontend.api import update_task_report
+from frontend.client import update_task_report
 
 __all__ = ["render_answers_and_missing_sections", "render_trust_audit_ledger"]
 

@@ -8,7 +8,7 @@ from typing import Final, cast
 import requests
 import streamlit as st
 
-from frontend.config import BACKEND_URL
+from frontend.ui_constants import BACKEND_URL
 
 __all__ = ["delete_historical_task", "purge_active_view", "render_historical_sidebar"]
 

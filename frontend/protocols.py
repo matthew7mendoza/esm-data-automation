@@ -35,3 +35,14 @@ class AuditArgsPayload(TypedDict):
     answers: dict[str, str]
     judge_iterations: int
     source_context: str
+
+class ConfigState(TypedDict, total=False):
+    api_key_input: str
+    llm_temperature: float
+    generator_system_prompt: str
+    judge_system_prompt: str
+    database_endpoint: str
+    global_chosen_engine: str
+    custom_key_name: str
+    recognized_provider: str
+

@@ -38,7 +38,6 @@ from backend.esm_data.database import (
 from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
 from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import (
-    AgentConfigurationError,
     AuditRequest,
     TaskId,
     TaskReportUpdateRequest,
@@ -125,7 +124,7 @@ async def generate_document(
         run_heavy_processing,
         task_id=task_id,
         target_doc=payload.target_doc.upper(),
-        model_provider=payload.model_provider,
+        model_provider=_sanitize_provider_token(payload.model_provider),
         staging_path=task_staging_path,
     )
     return JSONResponse(
@@ -270,56 +269,62 @@ async def list_all_tasks(
     ]
 
 
+def _sanitize_provider_token(raw_token: str, /) -> str:
+    """
+    Transforms frontend UI presentation tags into core factory routing string literals.
+    """
+    clean = raw_token.lower()
+
+    if "gemini" in clean:
+        return "gemini"
+    if "openai" in clean:
+        return "openai"
+    if "nvidia" in clean or "nemotron" in clean:
+        return "nemotron"
+
+    active_config = settings_engine.get_current()
+    if active_config.custom_key_name and active_config.custom_key_name.lower() == clean:
+        return active_config.recognized_provider
+
+    return clean
+
 @app.post("/api/audit")
 async def run_audit(
-    payload: AuditRequest, model_provider: str = Query("gemini")
+    payload: AuditRequest,
+    *,
+    model_provider: str = Query("gemini")
 ) -> AuditStressTestReport:
-    """
-    Run stability test w/o blocking primary application
-    """
+    active_config = settings_engine.get_current()
+    target_engine = _sanitize_provider_token(model_provider)
 
-    try:
-        provider_instance = get_provider(name=model_provider)
-        judge = LLMJudge(provider=provider_instance)
+    engine_client = get_provider(
+        name=target_engine,
+        api_key=active_config.api_key_input if active_config.api_key_input else None
+    )
 
-    except (ValueError, AgentConfigurationError) as initialization_error:
-        logger.error(
-            "Failed to construct evaluator engine configuration mappings", exc_info=True
+    judge = LLMJudge(
+        provider=engine_client,
+        instructions=(
+            active_config.judge_system_prompt
+            if active_config.judge_system_prompt
+            else None
+        )
+    )
+    answers_text = json.dumps(payload.answers, indent=2)
+
+    metrics = await judge.run_stability_stress_test_async(
+        source_content=payload.source_context,
+        paste_content=answers_text,
+        prefix_label="API_EVAL",
+        i_iterations=payload.iterations,
+    )
+
+    if not metrics:
+        raise ValueError(
+            "Audit lifecycle execution produced empty validation sequence."
         )
 
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"LLM Judge Provider Failure: {initialization_error}",
-        ) from initialization_error
-
-    answers_as_text = json.dumps(payload.answers, indent=2)
-
-    try:
-        metrics = await judge.run_stability_stress_test_async(
-            source_content=payload.source_context,
-            paste_content=answers_as_text,
-            prefix_label="API_EVAL",
-            i_iterations=payload.iterations,
-        )
-        if not metrics:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Stability Audit Failure: empty report generated.",
-            )
-        return cast(AuditStressTestReport, metrics)
-
-    except HTTPException:
-        raise
-    except Exception as runtime_execution_error:
-        logger.error(
-            "Exception intercepted during execution of stability stress test loops",
-            exc_info=True,
-        )
-
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Stability Audit Failure: {runtime_execution_error!s}",
-        ) from runtime_execution_error
+    return cast(AuditStressTestReport, metrics)
 
 
 @app.get("/api/settings", response_model=PipelineSettings)
@@ -340,15 +345,4 @@ async def reset_system_settings() -> dict[str, str]:
     """Wipes out active user overrides and restores factory instructions."""
     settings_engine.reset_to_factory_defaults()
     return {"status": "SUCCESS", "message": "Factory settings restored."}
-
-
-@app.get("/api/metrics/tokens")
-async def get_aggregate_token_usage(
-    *,
-    session: AsyncSession = Depends(get_db_session),
-) -> dict[str, int]:
-    """Computes total consumed processing tokens across runtime lifecycles."""
-    logger.debug(f"Database tracking tracking context active: {session}")
-    return {"total_tokens_consumed": 1420850}
-
 

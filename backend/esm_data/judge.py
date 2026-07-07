@@ -132,11 +132,15 @@ class LLMJudge:
     provider: LLMProvider
     system_instruction: str
 
-    def __init__(self, provider: LLMProvider) -> None:
+    def __init__(self, provider: LLMProvider, instructions: str | None = None) -> None:
         if not provider:
             raise ValueError("An active LLM API key must be provided!")
         self.provider = provider
-        self.system_instruction = self._load_judge_instructions()
+        self.system_instruction = (
+            instructions
+            if instructions is not None
+            else self._load_judge_instructions()
+        )
 
     def __repr__(self) -> str:
         """Technical output string"""

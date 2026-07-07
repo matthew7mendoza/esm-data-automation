@@ -1,13 +1,6 @@
-"""
-LLM Provider Protocols, Identifies which Provider is being used
-
-Abstracts any one provider so the application can switch
-between providers.
-"""
-
+"""LLM Provider Protocols identifying active operational execution engines."""
 import os
 from collections.abc import Callable
-from functools import partial
 from typing import Final, Protocol, TypedDict, Unpack, cast, runtime_checkable
 
 import openai
@@ -24,29 +17,20 @@ __all__: Final[list[str]] = [
     "register_provider",
 ]
 
-
 @runtime_checkable
 class LLMProvider(Protocol):
-    """
-    Duck typing, any class that has the same methods
-    is automatically an LLMProvider.
-    Protocol is used to abstract LLM Provider
-    """
+    """Duck typing structural interface for concrete LLM client abstractions."""
 
     def generate_structured[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T: ...
 
     async def generate_structured_async[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T: ...
 
-
 class GeminiProvider:
-    """
-    Gemini API implementation, an LLMProvider
-    Connector for Google's Gemini models
-    """
+    """Connector engine optimized for Google's Gemini API architectures."""
 
     __slots__ = ("client", "model_name")
 
@@ -56,25 +40,22 @@ class GeminiProvider:
         api_key: str | None = None,
         model_name: str = "gemini-3.1-pro-preview",
     ) -> None:
-        key = api_key or os.environ.get("GEMINI_API_KEY")
+        key = api_key or os.environ.get("GEMINI_API_KEY", "")
+        if not key:
+            raise ValueError("Execution failed: Missing GEMINI_API_KEY value.")
+
         self.client = genai.Client(api_key=key)
         self.model_name = model_name
 
     def __repr__(self) -> str:
-        """Debugger output"""
         return f"GeminiProvider(model_name={self.model_name!r})"
 
     def __str__(self) -> str:
-        """Readable log output string"""
         return f"Gemini Provider Engine [Active Model: {self.model_name}]"
 
     def generate_structured[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T:
-        """
-        Requests Gemini LLM to respond according to strict
-        response_schema
-        """
         response = self.client.models.generate_content(
             model=self.model_name,
             contents=prompt,
@@ -85,18 +66,13 @@ class GeminiProvider:
                 temperature=0.0,
             ),
         )
-        parsed = response.parsed
-        if parsed is None:
+        if (parsed := response.parsed) is None:
             raise ValueError("Failed to parse structured response from Gemini.")
         return cast(T, parsed)
 
     async def generate_structured_async[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T:
-        """
-        Async function for LLM Judge,
-        multiple evaluations simultaneously
-        """
         response = await self.client.aio.models.generate_content(
             model=self.model_name,
             contents=prompt,
@@ -107,18 +83,12 @@ class GeminiProvider:
                 temperature=0.0,
             ),
         )
-        parsed = response.parsed
-        if parsed is None:
+        if (parsed := response.parsed) is None:
             raise ValueError("Failed to parse structured response from Gemini.")
         return cast(T, parsed)
 
-
 class OpenAIProvider:
-    """
-    OpenAI API
-    Also connects to Nvidia NIM and other providers
-    that have the same format as OpenAI by changing base_url
-    """
+    """Standardized wrapper for processing calls to OpenAI endpoint topologies."""
 
     __slots__ = ("async_client", "client", "model_name")
 
@@ -128,27 +98,24 @@ class OpenAIProvider:
         api_key: str | None = None,
         model_name: str = "gpt-4o",
         base_url: str | None = None,
-        env_var_name: str = "OPENAI_API_KEY",
     ) -> None:
-        key = api_key or os.environ.get(env_var_name)
+        key = api_key or os.environ.get("OPENAI_API_KEY", "")
+        if not key:
+            raise ValueError("Execution failed: Missing standard API key mapping.")
+
         self.client = openai.OpenAI(api_key=key, base_url=base_url)
         self.async_client = openai.AsyncOpenAI(api_key=key, base_url=base_url)
         self.model_name = model_name
 
     def __repr__(self) -> str:
-        """Debugger output"""
         return f"OpenAIProvider(model_name={self.model_name!r})"
 
     def __str__(self) -> str:
-        """log output string"""
-        return f"OpenAI-like provider engine [Active Model: {self.model_name}]"
+        return f"OpenAI Provider Engine [Active Model: {self.model_name}]"
 
     def generate_structured[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T:
-        """
-        Requests OpenAI to reply using strict response_schema
-        """
         response = self.client.beta.chat.completions.parse(
             model=self.model_name,
             messages=[
@@ -158,18 +125,13 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
+        if (parsed := response.choices[0].message.parsed) is None:
             raise ValueError("Failed to parse structured response from OpenAI.")
         return parsed
 
     async def generate_structured_async[T: BaseModel](
-        self, prompt: str, system_instruction: str, response_schema: type[T]
+        self, *, prompt: str, system_instruction: str, response_schema: type[T]
     ) -> T:
-        """
-        Async function for LLM Judge,
-        multiple evaluations simultaneously
-        """
         response = await self.async_client.beta.chat.completions.parse(
             model=self.model_name,
             messages=[
@@ -179,56 +141,41 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        parsed = response.choices[0].message.parsed
-        if parsed is None:
+        if (parsed := response.choices[0].message.parsed) is None:
             raise ValueError("Failed to parse structured response from OpenAI.")
         return parsed
-
 
 class ProviderArgs(TypedDict, total=False):
     api_key: str | None
     model_name: str
     base_url: str | None
 
-
 _REGISTRY: Final[dict[str, Callable[..., LLMProvider]]] = {}
 
-
-def register_provider(name: str, provider_factory: Callable[..., LLMProvider]) -> None:
-    """
-    Adds a new AI provider factory to the system's list
-    """
+def register_provider(
+    name: str, provider_factory: Callable[..., LLMProvider]) -> None:
     _REGISTRY[name.lower()] = provider_factory
 
-
 def get_provider(
-    name: str | None = None, **kwargs: Unpack[ProviderArgs]
-) -> LLMProvider:
-    """
-    Looks at .env file to see what provider you want to use then sets
-    up the class. Default is "gemini"
-    """
-    provider_choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
-    provider_factory = _REGISTRY.get(provider_choice.lower())
+    name: str | None = None, **kwargs: Unpack[ProviderArgs]) -> LLMProvider:
+    choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
+    factory = _REGISTRY.get(choice.lower())
 
-    if not provider_factory:
-        available_options = list(_REGISTRY.keys())
-        raise ValueError(
-            f"!!!: '{provider_choice}' is not registered!.\n"
-            f"Available options are: {available_options}"
-        )
+    if not factory:
+        raise ValueError(f"Provider '{choice}' is not registered in runtime context.")
 
-    return provider_factory(**kwargs)
+    return factory(**kwargs)
 
+def _nemotron_factory(**kwargs: Unpack[ProviderArgs]) -> LLMProvider:
+    api_key = kwargs.get("api_key") or os.environ.get("NVIDIA_API_KEY", "")
+    if not api_key:
+        raise ValueError("Execution failed: Missing NVIDIA_API_KEY value.")
+    return OpenAIProvider(
+        api_key=api_key,
+        model_name=kwargs.get("model_name", "nvidia/nemotron-4-340b-instruct"),
+        base_url=kwargs.get("base_url", "https://integrate.api.nvidia.com/v1"),
+    )
 
 register_provider("gemini", GeminiProvider)
 register_provider("openai", OpenAIProvider)
-register_provider(
-    "nemotron",
-    partial(
-        OpenAIProvider,
-        base_url="https://integrate.api.nvidia.com/v1",
-        model_name="nvidia/nemotron-3-ultra-550b-a55b",
-        env_var_name="NVIDIA_API_KEY",
-    ),
-)
+register_provider("nemotron", _nemotron_factory)

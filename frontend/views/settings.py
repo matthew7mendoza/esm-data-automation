@@ -1,25 +1,23 @@
-"""
-Standalone page layer rendering operational controls and hardware metrics.
-"""
-from typing import Any, Final, cast
+"""Streamlit layout rendering interface configurations and environment overrides."""
+from typing import Final, cast
 
 import requests
 import streamlit as st
 
-from frontend.config import BACKEND_URL
+from frontend.protocols import ConfigState
+from frontend.ui_constants import BACKEND_URL
 
-__all__ = ["detect_provider", "render_settings_view"]
+__all__: Final[list[str]] = ["render_settings_view"]
 
 SETTINGS_API_URL: Final[str] = f"{BACKEND_URL}/api/settings"
 RESET_API_URL: Final[str] = f"{BACKEND_URL}/api/settings/reset"
 
-
 def _fetch_active_settings() -> dict[str, object] | None:
-    """Queries backend interface for existing operational parameters."""
+    """Pulls existing state from backend over isolated REST call."""
     try:
         res = requests.get(SETTINGS_API_URL, timeout=5)
     except requests.exceptions.RequestException:
-        st.error("Could not pull settings frame from server boundary.")
+        st.error("Failed to fetch settings from backend system.")
         return None
 
     if res.status_code != 200:
@@ -27,167 +25,209 @@ def _fetch_active_settings() -> dict[str, object] | None:
 
     return cast(dict[str, object], res.json())
 
+def _commit_runtime_update(payload: dict[str, str | float], /) -> bool:
+    """Pushes new memory block to configuration agent."""
+    try:
+        res = requests.patch(SETTINGS_API_URL, json=payload, timeout=5)
+    except requests.exceptions.RequestException:
+        return False
 
-def detect_provider(api_key: str) -> str | None:
-    """Identifies the LLM provider based on API key prefix standards."""
-    clean_key = api_key.strip()
-    if not clean_key:
-        return None
-    if clean_key.startswith("sk-ant-"):
-        return "Anthropic"
-    if clean_key.startswith(("sk-proj-", "sk-")):
-        return "OpenAI"
-    if clean_key.startswith("AIzaSy"):
-        return "Google Gemini"
-    return None
+    return res.status_code == 200
 
-
-def _handle_api_key_change() -> None:
-    """Updates available models dynamically when API key updates."""
-    input_key = st.session_state.get("api_key_widget_input", "")
-    provider = detect_provider(input_key)
-    if not provider:
+def _initialize_local_state() -> None:
+    """Guards session state to ensure single network trip."""
+    fetched = _fetch_active_settings()
+    if not fetched:
+        st.warning(
+            "Systems offline: Verification parameters isolated from backend API."
+        )
         return
+    st.session_state.local_config_state = fetched
 
-    engine_name = f"{provider} Custom Engine"
-    if "available_models" not in st.session_state:
-        st.session_state.available_models = []
+def _recognize_provider(api_key: str) -> str:
+    """Detects provider from common API key prefixes."""
+    api_key = api_key.strip()
+    if api_key.startswith("AIza"):
+        return "gemini"
+    if api_key.startswith("sk-proj-") or api_key.startswith("sk-"):
+        return "openai"
+    if api_key.startswith("nvapi-"):
+        return "nemotron"
+    return ""
 
-    if engine_name in st.session_state.available_models:
-        return
-
-    st.session_state.available_models.append(engine_name)
-    st.session_state.global_chosen_engine = engine_name
-    st.toast(f"Detected {provider} key! Added {engine_name} to engines list.")
-
-
-def render_settings_view() -> None:
-    """Renders the settings and metric dashboard controls in isolation."""
-    st.header("System Settings")
-
-    current_config = _fetch_active_settings()
-    if not current_config:
-        st.warning("Failed to map connection configurations to backend API.")
-        return
-
-    st.markdown("### LLM Model")
-    if "available_models" not in st.session_state:
-        st.session_state.available_models = []
-
-    st.selectbox(
-        "Select Active Engine",
-        options=st.session_state.available_models,
-        key="global_chosen_engine",
-    )
-
-    st.markdown("### Hyperparameters & Context Overrides")
-    if "api_key_widget_input" not in st.session_state:
-        st.session_state.api_key_widget_input = str(
-            current_config.get("api_key_input", "")
-            )
+def _render_form_fields(
+    state: ConfigState
+) -> tuple[str, float, str, str, str, str, str]:
+    """Render setting fields and returns the UI values"""
+    st.markdown("### Active Execution Target")
 
     api_key = st.text_input(
         "API Provider Secret Key",
-        key="api_key_widget_input",
+        value=str(state.get("api_key_input", "")),
         type="password",
-        help="Input credentials for external execution providers cleanly.",
-        on_change=_handle_api_key_change,
     )
 
-    raw_temp = current_config.get("llm_temperature", 0.0)
-    val_temp = float(raw_temp) if isinstance(raw_temp, (int, float)) else 0.0
+    recognized_provider = _recognize_provider(api_key) if api_key else ""
+    custom_name = str(state.get("custom_key_name", ""))
+
+    if recognized_provider:
+        st.success(f"Recognized provider: {recognized_provider.title()}")
+        custom_name = st.text_input("Name this key", value=custom_name)
+    else:
+        custom_name = ""
+
+    engine_choices: list[str] = ["gemini", "nemotron"]
+    if custom_name and custom_name not in engine_choices:
+        engine_choices.append(custom_name)
+
+    current_engine = str(state.get("global_chosen_engine", "gemini"))
+    if current_engine not in engine_choices:
+        current_engine = "gemini"
+
+    chosen_engine = st.selectbox(
+        "Select Active Engine",
+        options=engine_choices,
+        index=engine_choices.index(current_engine),
+        format_func=lambda x: (
+            f"{x.upper()} (Configured Model)"
+            if x == "gemini"
+            else x.title() if x not in ["gemini", "nemotron"] else x.upper()
+        ),
+    )
+
 
     temperature = st.slider(
         "LLM Generation Temperature",
         min_value=0.0,
         max_value=1.0,
-        value=val_temp,
+        value=float(state.get("llm_temperature", 0.0)),
         step=0.05,
-        help="Lower -> deterministic; higher -> variation. Temp 0 recommended.",
-    )
-
-    db_endpoint = st.text_input(
-        "Database Engine Endpoint URI String",
-        value=str(current_config.get("database_endpoint", "")),
-        help="Active targets for the storage engine connection string.",
     )
 
     generator_prompt = st.text_area(
         "Generator System Core Prompt",
-        value=str(current_config.get("generator_system_prompt", "")),
+        value=str(state.get("generator_system_prompt", "")),
         height=150,
     )
 
     judge_prompt = st.text_area(
         "LLM Judge Evaluation Core Prompt",
-        value=str(current_config.get("judge_system_prompt", "")),
+        value=str(state.get("judge_system_prompt", "")),
         height=150,
     )
 
-    st.divider()
-    _render_action_buttons(
-        temperature, api_key, generator_prompt, judge_prompt, db_endpoint
+    return (
+        api_key,
+        temperature,
+        generator_prompt,
+        judge_prompt,
+        str(chosen_engine),
+        custom_name,
+        recognized_provider
     )
 
-
-def _render_action_buttons(
-    temp: float, key: str, gen: str, judge: str, db: str) -> None:
-    """Handles layout form post submissions cleanly with zero logic nesting."""
-    col_save, col_reset = st.columns(2)
-
-    with col_save:
-        _handle_save_action(temp, key, gen, judge, db)
-
-    with col_reset:
-        _handle_reset_action()
-
-
 def _handle_save_action(
-    temp: float, key: str, gen: str, judge: str, db: str) -> None:
-    """Processes save events directly using flat guard returns."""
-    if not st.button(
-        "Save System Configuration", type="primary", use_container_width=True
-    ):
-        return
-
-    payload: dict[str, Any] = {
+    state: ConfigState,
+    api_key: str,
+    temp: float,
+    gen_prompt: str,
+    judge_prompt: str,
+    chosen_engine: str,
+    custom_name: str,
+    recognized_provider: str,
+) -> None:
+    """Helper to process the save settings action."""
+    payload: dict[str, str | float] = {
         "llm_temperature": temp,
-        "api_key_input": key,
-        "generator_system_prompt": gen,
-        "judge_system_prompt": judge,
-        "database_endpoint": db,
+        "api_key_input": api_key,
+        "generator_system_prompt": gen_prompt,
+        "judge_system_prompt": judge_prompt,
+        "database_endpoint": str(state.get("database_endpoint", "")),
+        "global_chosen_engine": chosen_engine,
+        "custom_key_name": custom_name,
+        "recognized_provider": recognized_provider,
     }
 
-    try:
-        res = requests.patch(SETTINGS_API_URL, json=payload, timeout=5)
-    except requests.exceptions.RequestException as err:
-        st.error(f"Network exception intercepted: {err}")
+    if _commit_runtime_update(payload):
+        st.session_state.local_config_state = payload
+        st.session_state.global_chosen_engine = chosen_engine
+        st.toast("Configurations successfully saved!")
+        st.rerun()
+    else:
+        st.error("Server synchronization rejected config schema")
+
+def _render_action_buttons(
+    state: ConfigState,
+    api_key: str,
+    temp: float,
+    gen_prompt: str,
+    judge_prompt: str,
+    chosen_engine: str,
+    custom_name: str,
+    recognized_provider: str,
+) -> None:
+    """Render Save/Reset buttons and handle their actions."""
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Commit Node Settings", type="primary", use_container_width=True):
+            _handle_save_action(
+                state,
+                api_key,
+                temp,
+                gen_prompt,
+                judge_prompt,
+                chosen_engine,
+                custom_name,
+                recognized_provider,
+            )
+
+    with col2:
+        if st.button(
+            "Reset Factory Defaults", type="secondary", use_container_width=True
+        ):
+            try:
+                res = requests.post(RESET_API_URL, timeout=5)
+            except requests.exceptions.RequestException:
+                st.error("Failed to execute state transition")
+                return
+            if res.status_code != 200:
+                st.error("Server rejected factory reset request.")
+                return
+
+            del st.session_state.local_config_state
+            st.toast("Factory settings successfully restored!")
+            st.rerun()
+
+def render_settings_view() -> None:
+    """Renders the UI elements"""
+    st.header("System Settings")
+
+    if "local_config_state" not in st.session_state:
+        _initialize_local_state()
+
+    if "local_config_state" not in st.session_state:
         return
 
-    if res.status_code != 200:
-        st.error("Server rejected the serialization structure.")
-        return
+    state = st.session_state.local_config_state
 
-    st.toast("Configurations successfully saved!")
-    st.rerun()
+    (
+        api_key,
+        temp,
+        gen_prompt,
+        judge_prompt,
+        chosen_engine,
+        custom_name,
+        recognized_provider,
+    ) = _render_form_fields(state)
 
-
-def _handle_reset_action() -> None:
-    """Processes factory rollback requests directly using flat guard returns."""
-    if not st.button(
-        "Reset to Factory Defaults", type="secondary", use_container_width=True
-    ):
-        return
-
-    try:
-        res = requests.post(RESET_API_URL, timeout=5)
-    except requests.exceptions.RequestException as err:
-        st.error(f"Network transport boundary failure: {err}")
-        return
-
-    if res.status_code != 200:
-        st.error("Failed to execute baseline state transitions.")
-        return
-
-    st.toast("Factory settings successfully restored!")
-    st.rerun()
+    _render_action_buttons(
+        state=state,
+        api_key=api_key,
+        temp=temp,
+        gen_prompt=gen_prompt,
+        judge_prompt=judge_prompt,
+        chosen_engine=chosen_engine,
+        custom_name=custom_name,
+        recognized_provider=recognized_provider,
+    )
