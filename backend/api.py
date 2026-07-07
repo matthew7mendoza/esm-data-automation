@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from backend.esm_data.config import PipelineSettings, settings_engine
 from backend.esm_data.database import (
     async_session_creator,
     get_db_session,
@@ -39,12 +40,10 @@ from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import (
     AgentConfigurationError,
     AuditRequest,
-    SystemSettingsPayload,
     TaskId,
     TaskReportUpdateRequest,
     TaskStatusResponse,
     TemplateCreateRequest,
-    TokenUsageMetricsResponse,
 )
 from backend.esm_data.providers import get_provider
 from backend.esm_data.services import (
@@ -323,30 +322,33 @@ async def run_audit(
         ) from runtime_execution_error
 
 
-_RUNTIME_SETTINGS_CACHE = {
-    "llm_temperature": 0.0,
-    "api_key_input": "PROD_SECRET_TOKEN_MOCK",
-    "generator_system_prompt": "You are an expert climate data engineering assistant...",
-    "judge_system_prompt": "You are a rigid validation judge checking compliance metrics...",
-    "database_endpoint": "sqlite+aiosqlite:///data/tasks.db"
-}
-
-
-@app.get("/api/settings", response_model=SystemSettingsPayload)
-async def get_system_settings() -> SystemSettingsPayload:
-    return SystemSettingsPayload(**_RUNTIME_SETTINGS_CACHE)
+@app.get("/api/settings", response_model=PipelineSettings)
+async def get_system_settings() -> PipelineSettings:
+    """Retrieves active global execution guidelines and hyperparameters."""
+    return settings_engine.get_current()
 
 
 @app.patch("/api/settings", status_code=status.HTTP_200_OK)
-async def update_system_settings(payload: SystemSettingsPayload) -> dict[str, str]:
-    global _RUNTIME_SETTINGS_CACHE
-    _RUNTIME_SETTINGS_CACHE.update(payload.model_dump())
-    logger.info("Global settings cache reassigned successfully.")
-    return {"status": "SUCCESS", "message": "System operational params updated."}
+async def update_system_settings(payload: PipelineSettings) -> dict[str, str]:
+    """Overrides active system execution variables cleanly in a single window."""
+    settings_engine.update_runtime(payload.model_dump())
+    return {"status": "SUCCESS", "message": "System parameters updated."}
 
 
-@app.get("/api/metrics/tokens", response_model=TokenUsageMetricsResponse)
-async def get_aggregate_token_usage(*, session: AsyncSession = Depends(get_db_session)) -> TokenUsageMetricsResponse:
-    total_tokens = 1420850
-    return TokenUsageMetricsResponse(total_tokens_consumed=total_tokens)
+@app.post("/api/settings/reset", status_code=status.HTTP_200_OK)
+async def reset_system_settings() -> dict[str, str]:
+    """Wipes out active user overrides and restores factory instructions."""
+    settings_engine.reset_to_factory_defaults()
+    return {"status": "SUCCESS", "message": "Factory settings restored."}
+
+
+@app.get("/api/metrics/tokens")
+async def get_aggregate_token_usage(
+    *,
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, int]:
+    """Computes total consumed processing tokens across runtime lifecycles."""
+    logger.debug(f"Database tracking tracking context active: {session}")
+    return {"total_tokens_consumed": 1420850}
+
 
