@@ -1,11 +1,11 @@
 from unittest.mock import MagicMock, patch
 
-from frontend.app import _render_step_three_download
+from frontend.views.generator import _render_step_three_download
 
 
 class TestDownloadFileNaming:
-    @patch("frontend.app.st")
-    @patch("frontend.app._build_final_document_string")
+    @patch("frontend.views.generator.st")
+    @patch("frontend.views.generator.build_final_document_string")
     def test_download_filename_custom_name_sanitized(
         self, mock_build: MagicMock, mock_st: MagicMock
     ) -> None:
@@ -26,8 +26,8 @@ class TestDownloadFileNaming:
             disabled=False,
         )
 
-    @patch("frontend.app.st")
-    @patch("frontend.app._build_final_document_string")
+    @patch("frontend.views.generator.st")
+    @patch("frontend.views.generator.build_final_document_string")
     def test_download_filename_fallback_to_template(
         self, mock_build: MagicMock, mock_st: MagicMock
     ) -> None:

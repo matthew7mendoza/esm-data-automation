@@ -1,5 +1,5 @@
 """
-Pristine structural assembly engine for the ESM Data Automation application.
+Assemble the complete application
 """
 
 import logging

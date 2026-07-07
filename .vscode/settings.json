@@ -1,4 +1,5 @@
 {
     "python-envs.defaultEnvManager": "ms-python.python:conda",
-    "python-envs.defaultPackageManager": "ms-python.python:conda"
+    "python-envs.defaultPackageManager": "ms-python.python:conda",
+    "mypy.dmypyExecutable": "/home/matthew7mendoza/miniforge3/envs/esm_llm_env/bin/dmypy",
 }

@@ -3,6 +3,7 @@ Document generator workspace tab view.
 """
 
 from typing import cast
+
 import streamlit as st
 
 from frontend.components.results import render_answers_and_missing_sections
@@ -35,13 +36,20 @@ def _render_step_one_upload(*, disabled: bool, target_document: str) -> None:
         disabled=disabled,
     )
 
-    button_type = "primary" if uploaded_files else "secondary"
-    trigger_generation = st.button(
-        "Read Files & Write Answers",
-        type=button_type,
-        use_container_width=True,
-        disabled=not uploaded_files or disabled,
-    )
+    if uploaded_files:
+        trigger_generation = st.button(
+            "Read Files & Write Answers",
+            type="primary",
+            use_container_width=True,
+            disabled=disabled,
+        )
+    else:
+        trigger_generation = st.button(
+            "Read Files & Write Answers",
+            type="secondary",
+            use_container_width=True,
+            disabled=True,
+        )
 
     if not trigger_generation:
         return

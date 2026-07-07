@@ -3,6 +3,7 @@ Stateless document formatting and byte buffer generators.
 """
 
 import io
+
 from docx import Document
 
 __all__ = ["build_final_document_string", "create_docx_buffer"]

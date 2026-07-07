@@ -70,9 +70,4 @@ TEMPLATE_DESCRIPTIONS: Final[dict[str, str]] = {
     ),
 }
 
-MODEL_CONFIGURATIONS: Final[dict[str, str]] ={
-    "Gemini": "gemini",
-    "Nvidia": "nemotron"
-}
-
 MODEL_CONFIGURATIONS: Final[dict[str, str]] = {"Gemini": "gemini", "Nvidia": "nemotron"}
