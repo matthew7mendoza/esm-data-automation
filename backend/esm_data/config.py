@@ -1,7 +1,6 @@
 """
 Isolate static configurations, file cache mechanisms, and runtime parameter maps.
 """
-
 import json
 import logging
 import os
@@ -35,7 +34,7 @@ class PipelineSettings(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    llm_temperature: float = Field(0.2, ge=0.0, le=1.0)
+    llm_temperature: float = Field(0.0, ge=0.0, le=1.0)
     api_key_input: str = Field("")
     generator_system_prompt: str = Field("")
     judge_system_prompt: str = Field("")
@@ -93,7 +92,7 @@ class ConfigurationManager:
     def _initialize_state(self) -> PipelineSettings:
         """Constructs starting operational contexts using environment fallbacks."""
         init_args: Final[dict[str, object]] = {
-            "llm_temperature": 0.2,
+            "llm_temperature": 0.0,
             "api_key_input": os.environ.get(
                 "ESM_API_KEY", "PROD_SECRET_TOKEN_MOCK"
             ),
@@ -159,7 +158,7 @@ class ConfigurationManager:
         """Purges interactive file overrides, restoring pristine definitions."""
         with self._lock:
             self._baselines = self._load_yaml_baselines()
-            self._active_settings.llm_temperature = 0.2
+            self._active_settings.llm_temperature = 0.0
             self._active_settings.generator_system_prompt = self._baselines[
                 "generator_prompt"
             ]

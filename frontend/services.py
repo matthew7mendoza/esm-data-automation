@@ -16,6 +16,16 @@ from frontend.protocols import TaskProfileDict, UploadedFileProtocol
 __all__ = ["send_audit_request", "send_generation_request"]
 
 
+def _surface_backend_warnings(*, payload: dict[str, object] | None) -> None:
+    """Looks for backend warnings and puts them to the frontend"""
+    if not payload:
+        return
+    warnings = payload.get("warnings")
+    if not isinstance(warnings, list):
+        return
+    for warning in warnings:
+        st.warning(f"Warning notice: {warning}")
+
 def _save_completed_generation(
     profile: TaskProfileDict, returned_task_id: str
 ) -> None:
@@ -48,6 +58,8 @@ def _poll_generation_task(
             container.empty()
             st.error("Lost communication tracking link with backend processing!")
             return False
+
+        _surface_backend_warnings(payload=cast(dict[str, object], profile))
 
         status = profile.get("status")
         if status == "FAILED":
@@ -155,6 +167,8 @@ def send_audit_request(
 
     metrics = cast(dict[str, object], audit_response.json())
     st.session_state.audit_metrics = metrics
+
+    _surface_backend_warnings(payload=metrics)
 
     st.success("Audit complete!")
 

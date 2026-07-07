@@ -1,20 +1,17 @@
 """
 Standalone page layer rendering operational controls and hardware metrics.
 """
-
 from typing import Any, Final, cast
 
 import requests
 import streamlit as st
 
-from backend.esm_data.models import TokenUsageMetricsResponse
 from frontend.config import BACKEND_URL
 
-__all__ = ["render_settings_view"]
+__all__ = ["detect_provider", "render_settings_view"]
 
 SETTINGS_API_URL: Final[str] = f"{BACKEND_URL}/api/settings"
 RESET_API_URL: Final[str] = f"{BACKEND_URL}/api/settings/reset"
-METRICS_API_URL: Final[str] = f"{BACKEND_URL}/api/metrics/tokens"
 
 
 def _fetch_active_settings() -> dict[str, object] | None:
@@ -31,48 +28,74 @@ def _fetch_active_settings() -> dict[str, object] | None:
     return cast(dict[str, object], res.json())
 
 
-def _fetch_token_telemetry() -> int:
-    """Extracts total processed runtime tokens from telemetry logs."""
-    try:
-        res = requests.get(METRICS_API_URL, timeout=5)
-    except requests.exceptions.RequestException:
-        return 0
+def detect_provider(api_key: str) -> str | None:
+    """Identifies the LLM provider based on API key prefix standards."""
+    clean_key = api_key.strip()
+    if not clean_key:
+        return None
+    if clean_key.startswith("sk-ant-"):
+        return "Anthropic"
+    if clean_key.startswith(("sk-proj-", "sk-")):
+        return "OpenAI"
+    if clean_key.startswith("AIzaSy"):
+        return "Google Gemini"
+    return None
 
-    if res.status_code != 200:
-        return 0
 
-    try:
-        token_metrics = TokenUsageMetricsResponse.model_validate(res.json())
-        return token_metrics.total_tokens_consumed
-    except Exception:
-        return 0
+def _handle_api_key_change() -> None:
+    """Updates available models dynamically when API key updates."""
+    input_key = st.session_state.get("api_key_widget_input", "")
+    provider = detect_provider(input_key)
+    if not provider:
+        return
+
+    engine_name = f"{provider} Custom Engine"
+    if "available_models" not in st.session_state:
+        st.session_state.available_models = []
+
+    if engine_name in st.session_state.available_models:
+        return
+
+    st.session_state.available_models.append(engine_name)
+    st.session_state.global_chosen_engine = engine_name
+    st.toast(f"Detected {provider} key! Added {engine_name} to engines list.")
 
 
 def render_settings_view() -> None:
     """Renders the settings and metric dashboard controls in isolation."""
-    st.header("System Settings & Telemetry")
+    st.header("System Settings")
 
     current_config = _fetch_active_settings()
     if not current_config:
         st.warning("Failed to map connection configurations to backend API.")
         return
 
-    tokens_used = _fetch_token_telemetry()
-    st.markdown("### Core System Telemetry")
-    st.metric(label="Token usage", value=f"{tokens_used:,} tokens")
-    st.divider()
+    st.markdown("### LLM Model")
+    if "available_models" not in st.session_state:
+        st.session_state.available_models = []
+
+    st.selectbox(
+        "Select Active Engine",
+        options=st.session_state.available_models,
+        key="global_chosen_engine",
+    )
 
     st.markdown("### Hyperparameters & Context Overrides")
+    if "api_key_widget_input" not in st.session_state:
+        st.session_state.api_key_widget_input = str(
+            current_config.get("api_key_input", "")
+            )
 
     api_key = st.text_input(
         "API Provider Secret Key",
-        value=str(current_config.get("api_key_input", "")),
+        key="api_key_widget_input",
         type="password",
         help="Input credentials for external execution providers cleanly.",
+        on_change=_handle_api_key_change,
     )
 
-    raw_temp = current_config.get("llm_temperature", 0.2)
-    val_temp = float(raw_temp) if isinstance(raw_temp, (int, float)) else 0.2
+    raw_temp = current_config.get("llm_temperature", 0.0)
+    val_temp = float(raw_temp) if isinstance(raw_temp, (int, float)) else 0.0
 
     temperature = st.slider(
         "LLM Generation Temperature",
@@ -108,8 +131,7 @@ def render_settings_view() -> None:
 
 
 def _render_action_buttons(
-    temp: float, key: str, gen: str, judge: str, db: str
-) -> None:
+    temp: float, key: str, gen: str, judge: str, db: str) -> None:
     """Handles layout form post submissions cleanly with zero logic nesting."""
     col_save, col_reset = st.columns(2)
 
@@ -121,8 +143,7 @@ def _render_action_buttons(
 
 
 def _handle_save_action(
-    temp: float, key: str, gen: str, judge: str, db: str
-) -> None:
+    temp: float, key: str, gen: str, judge: str, db: str) -> None:
     """Processes save events directly using flat guard returns."""
     if not st.button(
         "Save System Configuration", type="primary", use_container_width=True

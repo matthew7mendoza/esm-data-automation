@@ -1,7 +1,6 @@
 """
 Assemble the complete application
 """
-
 import logging
 import os
 from typing import Final
@@ -56,6 +55,14 @@ def _initialize_session_state() -> None:
 
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
+
+    if "available_models" not in st.session_state:
+        st.session_state.available_models = list(MODEL_CONFIGURATIONS.keys())
+
+    is_not_set = "global_chosen_engine" not in st.session_state
+    has_models = st.session_state.available_models
+    if is_not_set and has_models:
+        st.session_state.global_chosen_engine = st.session_state.available_models[0]
 
 
 def _handle_pending_generation(generation_args: GenerationArgsPayload) -> None:
@@ -119,8 +126,7 @@ def _process_pending_jobs() -> None:
 
 
 def _render_template_button(
-    template_name: str, selected_page: str, disabled: bool
-) -> None:
+    template_name: str, selected_page: str, disabled: bool) -> None:
     btn_label = TEMPLATE_DISPLAY_NAMES.get(template_name, template_name)
     is_active = template_name == selected_page
     clicked = st.sidebar.button(
@@ -166,7 +172,6 @@ def _render_active_run_header(currently_active_task_id: str | None) -> None:
 def _render_sidebar(
     is_running: bool,
     available_templates: list[str],
-    available_models: list[str],
 ) -> str:
     """Renders the sidebar navigation and returns the selected page."""
     selected_page: str = st.session_state.get("selected_template", OVERVIEW_PAGE)
@@ -214,7 +219,7 @@ def _render_sidebar(
     )
 
     settings_clicked = st.sidebar.button(
-        "System Management & Metrics",
+        "System Settings & Customization",
         key="page_settings_navigation",
         type="primary" if selected_page == SETTINGS_PAGE else "secondary",
         width="stretch",
@@ -223,13 +228,6 @@ def _render_sidebar(
     if settings_clicked:
         st.session_state.selected_template = SETTINGS_PAGE
         st.rerun()
-
-    st.sidebar.selectbox(
-        "Select Active Engine",
-        available_models,
-        disabled=is_running,
-        key="global_chosen_engine",
-    )
 
     if settings_clicked:
         return SETTINGS_PAGE
@@ -241,7 +239,6 @@ def main() -> None:
     st.set_page_config(page_title="ESM Data Automation", layout="wide")
 
     inject_global_theme()
-    st.title("ESM Data Automation Pipeline")
 
     _initialize_session_state()
     _process_pending_jobs()
@@ -252,18 +249,21 @@ def main() -> None:
         st.warning("Active AI job currently running...")
 
     available_templates: list[str] = fetch_server_templates()
-    available_models: list[str] = list(MODEL_CONFIGURATIONS.keys())
+    available_models: list[str] = st.session_state.available_models
     selected_page: str = _render_sidebar(
-        is_running, available_templates, available_models
+        is_running, available_templates
     )
+
+    if selected_page == SETTINGS_PAGE:
+        render_settings_view()
+        return
+
+    st.title("ESM Data Automation Pipeline")
 
     if selected_page == OVERVIEW_PAGE:
         render_overview_view()
         return
 
-    if selected_page == SETTINGS_PAGE:
-        render_settings_view()
-        return
     currently_active_task_id = st.session_state.get("current_task_id")
     _render_active_run_header(currently_active_task_id)
 
@@ -283,6 +283,7 @@ def main() -> None:
 
     if st.session_state.get("run_state") == "executing":
         st.rerun()
+
 
 if __name__ == "__main__":
     main()
