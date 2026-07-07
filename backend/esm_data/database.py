@@ -4,7 +4,6 @@ Database configuration & session management
 
 import os
 from collections.abc import AsyncGenerator
-from importlib.resources import files
 from pathlib import Path
 from typing import Final
 
@@ -14,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 __all__ = ["async_engine", "async_session_creator", "get_db_session", "init_db_tables"]
 
-PROJECT_ROOT = Path(str(files("backend"))).parent
+PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH = PROJECT_ROOT / "data" / "esm_form_automation.db"
 DATABASE_URL: Final[str] = os.environ.get(
     "DATABASE_URL", f"sqlite+aiosqlite:///{DEFAULT_DB_PATH}"

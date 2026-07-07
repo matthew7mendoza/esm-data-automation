@@ -4,7 +4,7 @@ Assemble the complete application
 
 import logging
 import os
-from typing import Final, cast
+from typing import Final
 
 import streamlit as st
 
@@ -16,7 +16,10 @@ from frontend.config import (
     MODEL_CONFIGURATIONS,
     TEMPLATE_DISPLAY_NAMES,
 )
-from frontend.protocols import UploadedFileProtocol
+from frontend.protocols import (
+    AuditArgsPayload,
+    GenerationArgsPayload,
+)
 from frontend.services import send_audit_request, send_generation_request
 from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
@@ -53,32 +56,24 @@ def _initialize_session_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def _handle_pending_generation(generation_args: object) -> None:
-    if not isinstance(generation_args, dict):
-        return
+def _handle_pending_generation(generation_args: GenerationArgsPayload) -> None:
     send_generation_request(
-        target_document=cast(str, generation_args.get("target_document", "")),
-        chosen_engine=cast(str, generation_args.get("chosen_engine", "")),
-        uploaded_files=cast(
-            list[UploadedFileProtocol],
-            generation_args.get("uploaded_files", []),
-        ),
-        custom_name=cast(str, generation_args.get("custom_name", "")),
+        target_document=generation_args["target_document"],
+        chosen_engine=generation_args["chosen_engine"],
+        uploaded_files=generation_args["uploaded_files"],
+        custom_name=generation_args["custom_name"],
     )
     st.session_state.job_running = False
     st.rerun()
 
 
-def _handle_pending_audit(audit_args: object) -> None:
-    if not isinstance(audit_args, dict):
-        return
-    args_copy = dict(audit_args)
-    task_id: str = str(args_copy.pop("task_id", ""))
+def _handle_pending_audit(audit_args: AuditArgsPayload) -> None:
+    task_id: str = audit_args["task_id"]
     metrics = send_audit_request(
-        chosen_engine=cast(str, args_copy.get("chosen_engine", "")),
-        answers=cast(dict[str, str], args_copy.get("answers", {})),
-        judge_iterations=cast(int, args_copy.get("judge_iterations", 3)),
-        source_context=cast(str, args_copy.get("source_context", "")),
+        chosen_engine=audit_args["chosen_engine"],
+        answers=audit_args["answers"],
+        judge_iterations=audit_args["judge_iterations"],
+        source_context=audit_args["source_context"],
     )
     st.session_state.job_running = False
     if not metrics:
@@ -202,7 +197,6 @@ def _render_sidebar(
         templates=available_templates,
     )
 
-    # Consolidated Session Management is rendered next
     render_historical_sidebar()
 
     # Settings Section Title
@@ -246,8 +240,6 @@ def main() -> None:
     if selected_page == OVERVIEW_PAGE:
         render_overview_view()
         return
-
-    # Main Workspace header area
     currently_active_task_id = st.session_state.get("current_task_id")
     _render_active_run_header(currently_active_task_id)
 
@@ -267,7 +259,6 @@ def main() -> None:
 
     if st.session_state.get("run_state") == "executing":
         st.rerun()
-
 
 if __name__ == "__main__":
     main()
