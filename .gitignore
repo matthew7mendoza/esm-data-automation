@@ -224,10 +224,14 @@ data/inputs/*
 !data/inputs/.gitkeep
 
 # Local SQLite Runtime Database
+data
+data/runtime_staging
+data/*
 data/esm_form_automation.db
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
 
 # Core Python & System Caches
 __pycache__/

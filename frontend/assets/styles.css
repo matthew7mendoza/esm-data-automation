@@ -1,0 +1,188 @@
+/* Global typography and line height */
+div.stMarkdown p,
+div.stMarkdown li {
+    line-height: 1.65 !important;
+    font-size: 0.95rem !important;
+    color: #374151 !important;
+}
+
+/* Limit reading text layout width for better ergonomics */
+div.stMarkdown {
+    max-width: 800px !important;
+}
+
+/* Breathing room for headers */
+div.stMarkdown h1,
+div.stMarkdown h2,
+div.stMarkdown h3,
+div.stMarkdown h4 {
+    margin-top: 1.75rem !important;
+    margin-bottom: 0.85rem !important;
+    font-weight: 600 !important;
+    color: #111827 !important;
+}
+
+/* Sidebar Navigation Button Styling (Borderless List Items) */
+.st-key-page_overview button,
+div[class*="st-key-template_page_"] button {
+    width: 100% !important;
+    border: none !important;
+    text-align: left !important;
+    justify-content: flex-start !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    margin: 2px 0 !important;
+    height: auto !important;
+    padding: 8px 12px !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+}
+
+/* Inactive Sidebar Navigation Items */
+.st-key-page_overview button[data-testid="baseButton-secondary"],
+div[class*="st-key-template_page_"] button[data-testid="baseButton-secondary"] {
+    background-color: transparent !important;
+    color: #4b5563 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+.st-key-page_overview button[data-testid="baseButton-secondary"]:hover,
+div[class*="st-key-template_page_"]
+button[data-testid="baseButton-secondary"]:hover {
+    background-color: #f3f4f6 !important;
+    color: #1f2937 !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* Active Sidebar Navigation Items (Crisp Blue Accent & Left Border) */
+.st-key-page_overview button[data-testid="baseButton-primary"],
+div[class*="st-key-template_page_"] button[data-testid="baseButton-primary"] {
+    background-color: #eff6ff !important;
+    color: #2563eb !important;
+    border: none !important;
+    border-left: 4px solid #2563eb !important;
+    border-radius: 0 6px 6px 0 !important;
+    padding-left: 8px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+}
+
+/* Session Management Sidebar Buttons (+ New / Delete Current) */
+.st-key-new_run_sidebar_btn button,
+.st-key-delete_run_sidebar_btn button {
+    background-color: transparent !important;
+    color: #6b7280 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    box-shadow: none !important;
+}
+.st-key-new_run_sidebar_btn button:hover {
+    background-color: #f3f4f6 !important;
+    color: #1f2937 !important;
+}
+.st-key-delete_run_sidebar_btn button:hover {
+    background-color: #fee2e2 !important;
+    color: #dc2626 !important;
+}
+.st-key-new_run_sidebar_btn button:disabled,
+.st-key-delete_run_sidebar_btn button:disabled {
+    color: #d1d5db !important;
+    background-color: transparent !important;
+    cursor: not-allowed !important;
+}
+
+/* Form Width Alignment Constraints */
+div[data-testid="stFileUploader"],
+div[data-testid="stTextInput"],
+div[data-testid="stForm"],
+div[data-testid="stMain"] div[data-testid="stSelectbox"],
+div[data-testid="stMain"] div[data-testid="stSlider"],
+div[data-testid="stMain"] div[data-testid="stRadio"],
+div[data-testid="stMain"] div.stButton button,
+div[data-testid="stMain"] div.stDownloadButton button {
+    max-width: 800px !important;
+}
+
+/* Tab Component Styling (Pill-shaped iOS style Container, Capped Width) */
+div[data-baseweb="tab-list"] {
+    background-color: #f3f4f6 !important;
+    padding: 4px !important;
+    border-radius: 8px !important;
+    border-bottom: none !important;
+    gap: 4px !important;
+    display: inline-flex !important;
+    width: 100% !important;
+    max-width: 800px !important;
+}
+div[data-baseweb="tab-list"] button {
+    background-color: transparent !important;
+    border: none !important;
+    border-radius: 6px !important;
+    color: #4b5563 !important;
+    padding: 8px 16px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+    flex: 1 1 0% !important;
+    text-align: center !important;
+}
+div[data-baseweb="tab-list"] button:hover {
+    color: #1f2937 !important;
+    background-color: rgba(255, 255, 255, 0.5) !important;
+}
+div[data-baseweb="tab-list"] button[aria-selected="true"] {
+    background-color: white !important;
+    color: #2563eb !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+    font-weight: 600 !important;
+    border-bottom: none !important;
+}
+div[data-baseweb="tab-highlight"] {
+    display: none !important;
+}
+
+/* Streamlit Default Deploy Button Styling (Solid Blue Button) */
+[data-testid="stHeaderDeployButton"] button,
+[data-testid="stHeaderDeployButton"] a {
+    background-color: #2563eb !important;
+    color: white !important;
+    border: 1px solid #2563eb !important;
+    border-radius: 6px !important;
+    padding: 6px 14px !important;
+    font-weight: 600 !important;
+    font-size: 0.85rem !important;
+    text-decoration: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    transition: all 0.2s ease !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05) !important;
+    height: 32px !important;
+    margin-right: 8px !important;
+}
+[data-testid="stHeaderDeployButton"] button:hover,
+[data-testid="stHeaderDeployButton"] a:hover {
+    background-color: #1d4ed8 !important;
+    border-color: #1d4ed8 !important;
+    color: white !important;
+    box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2),
+        0 2px 4px -1px rgba(37, 99, 235, 0.1) !important;
+}
+
+/* Sidebar Alignment and Spacing (Perfect Left-Alignment) */
+div[data-testid="stSidebar"] h2,
+div[data-testid="stSidebar"] h3,
+div[data-testid="stSidebar"] h4,
+div[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+div[data-testid="stSidebar"] .stCaptionContainer {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    margin-left: 0 !important;
+}
+div[data-testid="stSidebar"] div[data-testid="stButton"],
+div[data-testid="stSidebar"] div[data-testid="stSelectbox"] {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+}
