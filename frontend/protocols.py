@@ -45,4 +45,5 @@ class ConfigState(TypedDict, total=False):
     global_chosen_engine: str
     custom_key_name: str
     recognized_provider: str
+    custom_key_providers: dict[str, str]
 

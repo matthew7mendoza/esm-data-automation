@@ -22,12 +22,14 @@ def _get_currently_active_task(
         return None
 
     valid_tasks = [
-        t
-        for t in historical_tasks
-        if t.get("status") == "COMPLETED" and t.get("report") is not None
+        task
+        for task in historical_tasks
+        if task.get("status") == "COMPLETED" and task.get("report") is not None
     ]
 
-    matching = [t for t in valid_tasks if str(t.get("task_id")) == str(task_id)]
+    matching = [
+        task for task in valid_tasks if str(task.get("task_id")) == str(task_id)
+    ]
     if not matching:
         return None
 

@@ -159,9 +159,9 @@ def _find_active_selection_option(
 def _send_delete_call(task_id: str) -> requests.Response | None:
     try:
         return requests.delete(f"{BACKEND_URL}/api/tasks/{task_id}", timeout=5)
-    except requests.exceptions.RequestException as err:
-        logger.error(f"Error deleting task {task_id}: {err}", exc_info=True)
-        st.error(f"Network error trying to delete run: {err}")
+    except requests.exceptions.RequestException as error:
+        logger.error(f"Error deleting task {task_id}: {error}", exc_info=True)
+        st.error(f"Network error trying to delete run: {error}")
         return None
 
 
@@ -192,9 +192,9 @@ def _send_rename_call(task_id: str, new_name: str) -> requests.Response | None:
             json={"custom_name": new_name},
             timeout=5,
         )
-    except requests.exceptions.RequestException as err:
-        logger.error(f"Error renaming task {task_id}: {err}", exc_info=True)
-        st.error(f"Network error trying to rename run: {err}")
+    except requests.exceptions.RequestException as error:
+        logger.error(f"Error renaming task {task_id}: {error}", exc_info=True)
+        st.error(f"Network error trying to rename run: {error}")
         return None
 
 

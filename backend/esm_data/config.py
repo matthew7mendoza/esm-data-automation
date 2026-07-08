@@ -42,6 +42,8 @@ class PipelineSettings(BaseModel):
     global_chosen_engine: str = Field("gemini")
     custom_key_name: str = Field("")
     recognized_provider: str = Field("")
+    custom_api_keys: dict[str, str] = Field(default_factory=dict)
+    custom_key_providers: dict[str, str] = Field(default_factory=dict)
 
     def __str__(self) -> str:
         return f"PipelineSettings(temp={self.llm_temperature})"
@@ -77,13 +79,13 @@ class ConfigurationManager:
 
         try:
             raw_text = yaml_path.read_text(encoding="utf-8")
-        except OSError as err:
-            raise ConfigError(f"Failed to read file: {yaml_path}") from err
+        except OSError as error:
+            raise ConfigError(f"Failed to read file: {yaml_path}") from error
 
         try:
             raw = yaml.safe_load(raw_text)
-        except yaml.YAMLError as err:
-            raise ConfigError("Invalid YAML syntax parsed") from err
+        except yaml.YAMLError as error:
+            raise ConfigError("Invalid YAML syntax parsed") from error
 
         return {
             "generator_prompt": str(
@@ -107,6 +109,8 @@ class ConfigurationManager:
             "global_chosen_engine": "gemini",
             "custom_key_name": "",
             "recognized_provider": "",
+            "custom_api_keys": {},
+            "custom_key_providers": {},
         }
 
         if not RUNTIME_SETTINGS_FILE.exists():
@@ -115,8 +119,8 @@ class ConfigurationManager:
         try:
             with open(RUNTIME_SETTINGS_FILE, encoding="utf-8") as f:
                 file_data = cast(dict[str, object], json.load(f))
-        except (OSError, json.JSONDecodeError) as err:
-            logger.warning("Dynamic rules deserialization aborted: %s", err)
+        except (OSError, json.JSONDecodeError) as error:
+            logger.warning("Dynamic rules deserialization aborted: %s", error)
             return PipelineSettings(**init_args)
 
         merged_args = {
@@ -139,26 +143,49 @@ class ConfigurationManager:
         with self._lock:
             return self._active_settings
 
-    def update_runtime(self, updates: dict[str, object]) -> None:
+    def update_runtime(self, updates: dict[str, object]) -> None:  # noqa: C901
         """Atomically synchronizes and commits runtime configuration updates."""
         with self._lock:
+            new_key = updates.get("api_key_input")
+            new_name = updates.get("custom_key_name")
+            new_provider = updates.get("recognized_provider")
+            if new_key and new_name and new_provider:
+                self._active_settings.custom_api_keys[str(new_name)] = str(new_key)
+
+                # Merge into updates so it isn't overwritten
+                provs = updates.get("custom_key_providers")
+                if provs is None:
+                    provs = self._active_settings.custom_key_providers.copy()
+                if isinstance(provs, dict):
+                    provs[str(new_name)] = str(new_provider)
+                updates["custom_key_providers"] = provs
+
             for key, value in updates.items():
+                if key in ("api_key_input", "custom_key_name", "recognized_provider"):
+                    continue
                 self._apply_field_update(key, value)
+
+            keys_to_delete = [
+                key for key in self._active_settings.custom_api_keys
+                if key not in self._active_settings.custom_key_providers
+            ]
+            for key in keys_to_delete:
+                del self._active_settings.custom_api_keys[key]
 
             try:
                 STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-            except OSError as err:
-                raise ConfigError("Failed to verify folder schema") from err
+            except OSError as error:
+                raise ConfigError("Failed to verify folder schema") from error
 
             try:
                 with open(
                     RUNTIME_SETTINGS_FILE, "w", encoding="utf-8"
                 ) as f_out:
                     json.dump(
-                        self._active_settings.model_dump(), f_out, indent=2
+                        self._active_settings.model_dump(exclude={"api_key_input", "custom_api_keys"}), f_out, indent=2  # noqa: E501
                     )
-            except OSError as err:
-                raise ConfigError("Failed to update tracking cache") from err
+            except OSError as error:
+                raise ConfigError("Failed to update tracking cache") from error
 
     def reset_to_factory_defaults(self) -> None:
         """Purges interactive file overrides, restoring pristine definitions."""
@@ -180,8 +207,8 @@ class ConfigurationManager:
 
             try:
                 RUNTIME_SETTINGS_FILE.unlink()
-            except OSError as err:
-                raise ConfigError("Failed to clear local cached rules") from err
+            except OSError as error:
+                raise ConfigError("Failed to clear local cached rules") from error
 
             logger.info("System settings returned completely to baselines.")
 

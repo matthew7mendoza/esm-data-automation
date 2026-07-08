@@ -23,7 +23,7 @@ from frontend.ui_constants import (
 from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
 from frontend.views.overview import render_overview_view
-from frontend.views.settings import render_settings_view
+from frontend.views.settings import _fetch_active_settings, render_settings_view
 
 __all__ = ["main"]
 
@@ -234,7 +234,7 @@ def _render_sidebar(
     return selected_page
 
 
-def main() -> None:
+def main() -> None:  # noqa: C901
     """Core coordination routine. Targets low indentation depths via guard clauses."""
     st.set_page_config(page_title="ESM Data Automation", layout="wide")
 
@@ -249,7 +249,18 @@ def main() -> None:
         st.warning("Active AI job currently running...")
 
     available_templates: list[str] = fetch_server_templates()
-    available_models: list[str] = st.session_state.available_models
+    available_models: list[str] = list(st.session_state.available_models)
+
+    if "local_config_state" not in st.session_state:
+        fetched = _fetch_active_settings()
+        if fetched:
+            st.session_state.local_config_state = fetched
+
+    if "local_config_state" in st.session_state:
+        custom_name = st.session_state.local_config_state.get("custom_key_name")
+        if custom_name and custom_name not in available_models:
+            available_models.append(str(custom_name))
+
     selected_page: str = _render_sidebar(
         is_running, available_templates
     )

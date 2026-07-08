@@ -27,6 +27,7 @@ __all__ = [
     "TaskReportUpdateRequest",
     "TaskStatusResponse",
     "TemplateCreateRequest",
+    "TemplateQuestionsExtraction",
     "TokenUsageMetricsResponse",
 ]
 
@@ -236,6 +237,18 @@ class FormResponses(BaseModel):
             "Questions that could not be verified or answered using the "
             "source documents."
         ),
+    )
+
+
+class TemplateQuestionsExtraction(BaseModel):
+    """
+    Validates the questions extracted by the AI from an unstructured template doc.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    questions: list[str] = Field(
+        ..., description="The ordered list of questions or form fields extracted from the document."  # noqa: E501
     )
 
 

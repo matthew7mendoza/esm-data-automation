@@ -118,10 +118,7 @@ async def _perform_document_extraction(
         )
 
         active_config = settings_engine.get_current()
-        provider_instance = get_provider(
-            name=model_provider,
-            api_key=active_config.api_key_input if active_config.api_key_input else None
-        )
+        provider_instance = get_provider(name=model_provider)
         generator = DocumentGenerator(
             provider=provider_instance,
             instructions=(

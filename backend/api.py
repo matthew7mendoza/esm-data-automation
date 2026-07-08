@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import shutil
+import tempfile
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -36,6 +37,7 @@ from backend.esm_data.database import (
     init_db_tables,
 )
 from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
+from backend.esm_data.document import extract_text
 from backend.esm_data.judge import AuditStressTestReport, LLMJudge
 from backend.esm_data.models import (
     AuditRequest,
@@ -44,6 +46,7 @@ from backend.esm_data.models import (
     TaskReportUpdateRequest,
     TaskStatusResponse,
     TemplateCreateRequest,
+    TemplateQuestionsExtraction,
 )
 from backend.esm_data.providers import get_provider
 from backend.esm_data.services import (
@@ -125,7 +128,7 @@ async def generate_document(
         run_heavy_processing,
         task_id=task_id,
         target_doc=payload.target_doc.upper(),
-        model_provider=_sanitize_provider_token(payload.model_provider),
+        model_provider=payload.model_provider,
         staging_path=task_staging_path,
     )
     return JSONResponse(
@@ -234,18 +237,19 @@ async def create_custom_template(
 ) -> dict[str, str]:
     """
     Saves a brand new form template into the database
-    making it instantly available
+    making it instantly available. Overwrites if it exists.
     """
 
     template_name_upper = payload.name.upper()
-    if (
+    existing = (
         await session.exec(
             select(FormTemplate).where(FormTemplate.name == template_name_upper)
         )
-    ).one_or_none():
-        raise HTTPException(
-            status_code=400, detail=f"Template '{template_name_upper}' already exists!"
-        )
+    ).one_or_none()
+
+    if existing:
+        await session.delete(existing)
+        await session.commit()
 
     db_questions = [
         TemplateQuestion(text=question_text, sort_order=index)
@@ -264,6 +268,52 @@ async def create_custom_template(
         "status": "SUCCESS",
         "message": f"Template '{template_name_upper}' successfully registered!",
     }
+
+
+@app.post("/api/templates/extract", status_code=status.HTTP_200_OK)
+async def extract_template_questions(
+    *,
+    file: UploadFile = File(...),
+    model_provider: str = Form("gemini")
+) -> list[str]:
+    """
+    Extracts form questions from an unstructured document using an LLM.
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file uploaded.")
+
+    # Save to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:  # noqa: E501
+        tmp.write(await file.read())
+        tmp_path = Path(tmp.name)
+
+    try:
+        source_text = extract_text(tmp_path)
+    except Exception as e:
+        tmp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=f"Failed to read document: {e}") from e  # noqa: E501
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+    provider_instance = get_provider(name=model_provider)
+
+    prompt = (
+        "Please extract all form fields or questions from the following document. "
+        "Format the output strictly as a list of strings representing the questions.\n\n"  # noqa: E501
+        f"DOCUMENT:\n{source_text}"
+    )
+
+    try:
+        validated_data = provider_instance.generate_structured(
+            prompt=prompt,
+            system_instruction="You are a strict data assistant. Extract the questions from the provided template document.",  # noqa: E501
+            response_schema=TemplateQuestionsExtraction,
+        )
+    except Exception as e:
+        logger.error(f"Failed to extract questions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="LLM failed to extract questions.") from e  # noqa: E501
+
+    return validated_data.questions
 
 
 @app.get("/api/tasks", response_model=list[TaskStatusResponse])
@@ -290,24 +340,7 @@ async def list_all_tasks(
     ]
 
 
-def _sanitize_provider_token(raw_token: str, /) -> str:
-    """
-    Transforms frontend UI presentation tags into core factory routing string literals.
-    """
-    clean = raw_token.lower()
 
-    if "gemini" in clean:
-        return "gemini"
-    if "openai" in clean:
-        return "openai"
-    if "nvidia" in clean or "nemotron" in clean:
-        return "nemotron"
-
-    active_config = settings_engine.get_current()
-    if active_config.custom_key_name and active_config.custom_key_name.lower() == clean:
-        return active_config.recognized_provider
-
-    return clean
 
 @app.post("/api/audit")
 async def run_audit(
@@ -316,12 +349,7 @@ async def run_audit(
     model_provider: str = Query("gemini")
 ) -> AuditStressTestReport:
     active_config = settings_engine.get_current()
-    target_engine = _sanitize_provider_token(model_provider)
-
-    engine_client = get_provider(
-        name=target_engine,
-        api_key=active_config.api_key_input if active_config.api_key_input else None
-    )
+    engine_client = get_provider(name=model_provider)
 
     judge = LLMJudge(
         provider=engine_client,
@@ -348,10 +376,12 @@ async def run_audit(
     return cast(AuditStressTestReport, metrics)
 
 
-@app.get("/api/settings", response_model=PipelineSettings)
-async def get_system_settings() -> PipelineSettings:
+@app.get("/api/settings")
+async def get_system_settings() -> dict[str, object]:
     """Retrieves active global execution guidelines and hyperparameters."""
-    return settings_engine.get_current()
+    return settings_engine.get_current().model_dump(
+        exclude={"api_key_input", "custom_api_keys"}
+        )
 
 
 @app.patch("/api/settings", status_code=status.HTTP_200_OK)
@@ -362,8 +392,18 @@ async def update_system_settings(payload: PipelineSettings) -> dict[str, str]:
 
 
 @app.post("/api/settings/reset", status_code=status.HTTP_200_OK)
-async def reset_system_settings() -> dict[str, str]:
+async def reset_system_settings(
+    session: AsyncSession = Depends(get_db_session)
+    ) -> dict[str, str]:
     """Wipes out active user overrides and restores factory instructions."""
     settings_engine.reset_to_factory_defaults()
+
+    # Re-seed the database form templates
+    templates = await session.exec(select(FormTemplate))
+    for template in templates.all():
+        await session.delete(template)
+    await session.commit()
+    await seed_data_from_yaml()
+
     return {"status": "SUCCESS", "message": "Factory settings restored."}
 

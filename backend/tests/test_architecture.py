@@ -13,7 +13,7 @@ PYTHON_FILES: list[Path] = list((PROJECT_ROOT / "backend").rglob("*.py")) + list
 @pytest.mark.parametrize("filepath", PYTHON_FILES, ids=lambda p: p.name)
 def test_no_wildcard_imports(filepath: Path) -> None:
     tree = ast.parse(filepath.read_text(encoding="utf-8"), filename=str(filepath))
-    import_nodes = (n for n in ast.walk(tree) if isinstance(n, ast.ImportFrom))
+    import_nodes = (node for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
     aliases = ((node, alias) for node in import_nodes for alias in node.names)
     for node, alias in aliases:
         assert alias.name != "*", (

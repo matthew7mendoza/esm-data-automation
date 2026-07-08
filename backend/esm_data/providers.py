@@ -8,6 +8,8 @@ from google import genai
 from google.genai import types
 from pydantic import BaseModel
 
+from backend.esm_data.config import settings_engine
+
 __all__: Final[list[str]] = [
     "GeminiProvider",
     "LLMProvider",
@@ -156,15 +158,56 @@ def register_provider(
     name: str, provider_factory: Callable[..., LLMProvider]) -> None:
     _REGISTRY[name.lower()] = provider_factory
 
-def get_provider(
-    name: str | None = None, **kwargs: Unpack[ProviderArgs]) -> LLMProvider:
-    choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
-    factory = _REGISTRY.get(choice.lower())
 
-    if not factory:
-        raise ValueError(f"Provider '{choice}' is not registered in runtime context.")
+BUILTIN_PROVIDERS = {
+    "gemini": "gemini",
+    "openai": "openai",
+    "nvidia": "nemotron",
+    "nemotron": "nemotron",
+}
 
-    return factory(**kwargs)
+def get_provider(  # noqa: C901
+    name: str | None = None, **kwargs: Unpack[ProviderArgs]
+) -> LLMProvider:
+    raw_choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
+    clean = raw_choice.lower()
+
+    for trigger, provider_id in BUILTIN_PROVIDERS.items():
+        if trigger not in clean:
+            continue
+        if provider_id not in _REGISTRY:
+            message = f"Built-in provider '{provider_id}' is not registered."
+            raise ValueError(message)
+        return _REGISTRY[provider_id](**kwargs)
+
+    active_config = settings_engine.get_current()
+    matched_key = next(
+        (key for key in active_config.custom_key_providers if key.lower() == clean),
+        None,
+    )
+
+    if matched_key:
+        provider_type = active_config.custom_key_providers[matched_key].lower()
+        if provider_type not in _REGISTRY:
+            message = (
+                f"Custom provider type '{provider_type}' "
+                f"for key '{matched_key}' is not registered."
+            )
+            raise ValueError(message)
+
+        factory_kwargs = {**kwargs}
+        if "api_key" not in factory_kwargs and (
+            custom_api_key := active_config.custom_api_keys.get(matched_key)
+        ):
+            factory_kwargs["api_key"] = custom_api_key
+
+        return _REGISTRY[provider_type](**factory_kwargs)
+
+    if clean not in _REGISTRY:
+        message = f"Unknown LLM provider: {clean}"
+        raise ValueError(message)
+
+    return _REGISTRY[clean](**kwargs)
 
 def _nemotron_factory(**kwargs: Unpack[ProviderArgs]) -> LLMProvider:
     api_key = kwargs.get("api_key") or os.environ.get("NVIDIA_API_KEY", "")

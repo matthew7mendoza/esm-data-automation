@@ -56,7 +56,9 @@ def _render_extracted_answers_tab(
     updated_missing: list[str],
 ) -> None:
     visible_extracted = {
-        q: a for q, a in extracted_answers.items() if q not in missing_information
+        question: answer
+        for question, answer in extracted_answers.items()
+        if question not in missing_information
     }
     if not visible_extracted:
         st.info("No answers were extracted by the AI.")

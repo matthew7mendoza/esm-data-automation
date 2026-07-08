@@ -20,7 +20,9 @@ def build_final_document_string(
     for question_text, answer_text in extracted_answers.items():
         document_blocks.append(f"### {question_text}\n{answer_text}\n\n")
 
-    unanswered = [q for q in missing_questions if q not in extracted_answers]
+    unanswered = [
+        question for question in missing_questions if question not in extracted_answers
+    ]
     for question_text in unanswered:
         document_blocks.append(f"### {question_text}\n*No answer provided*\n\n")
 
@@ -40,7 +42,9 @@ def create_docx_buffer(
         doc.add_heading(question_text, level=2)
         doc.add_paragraph(answer_text)
 
-    unanswered = [q for q in missing_questions if q not in extracted_answers]
+    unanswered = [
+        question for question in missing_questions if question not in extracted_answers
+    ]
     for question_text in unanswered:
         doc.add_heading(question_text, level=2)
         p = doc.add_paragraph()
