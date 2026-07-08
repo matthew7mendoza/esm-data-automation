@@ -7,7 +7,7 @@ import streamlit as st
 __all__ = ["render_overview_view"]
 
 
-def render_overview_view() -> None:
+def render_overview_view(*, disabled: bool) -> None:
     """
     Renders landing page details and template starter triggers.
     """
@@ -99,7 +99,7 @@ def render_overview_view() -> None:
         "<div style='margin-top: 2rem; margin-bottom: 1rem;'>",
         unsafe_allow_html=True,
     )
-    if st.button("Start Generating Documentation", type="primary"):
+    if st.button("Start Generating Documentation", type="primary", disabled=disabled):
         st.session_state.selected_template = "README"
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)

@@ -77,7 +77,9 @@ def _on_custom_key_added() -> None:
         st.toast(f"Successfully ingested {name}!")
 
 def _render_form_fields(  # noqa: C901
-    state: ConfigState
+    state: ConfigState,
+    *,
+    disabled: bool,
 ) -> tuple[str, float, str, str, str, str, str]:
     """Render setting fields and returns the UI values"""
     st.markdown("### Active Execution Target")
@@ -90,6 +92,7 @@ def _render_form_fields(  # noqa: C901
         "API Provider Secret Key",
         type="password",
         key="temp_api_key",
+        disabled=disabled,
     )
 
     api_key = st.session_state.temp_api_key
@@ -100,7 +103,8 @@ def _render_form_fields(  # noqa: C901
         st.text_input(
             "Name this key (Press Enter to ingest)",
             key="temp_api_name",
-            on_change=_on_custom_key_added
+            on_change=_on_custom_key_added,
+            disabled=disabled,
         )
 
     engine_choices: list[str] = ["gemini", "nemotron"]
@@ -119,6 +123,7 @@ def _render_form_fields(  # noqa: C901
             "Select Active Engine",
             options=engine_choices,
             index=engine_choices.index(current_engine),
+            disabled=disabled,
             format_func=lambda engine_name: (
                 f"{engine_name.upper()} (Configured Model)"
                 if engine_name == "gemini"
@@ -132,9 +137,15 @@ def _render_form_fields(  # noqa: C901
     with col2:
         st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
         is_custom = chosen_engine not in ["gemini", "nemotron"]
-        if is_custom and st.button("Remove", key=f"del_{chosen_engine}"):
+        remove_clicked = st.button(
+            "Remove", key=f"del_{chosen_engine}", disabled=disabled
+        )
+        if is_custom and remove_clicked:
             payload = state.copy()
-            custom_providers_from_payload = cast(dict[str, object], payload).get("custom_key_providers")  # noqa: E501
+            payload_dictionary = cast(dict[str, object], payload)
+            custom_providers_from_payload = payload_dictionary.get(
+                "custom_key_providers"
+            )
             if not isinstance(custom_providers_from_payload, dict):
                 custom_providers_from_payload = {}
             custom_dict = dict[str, str](custom_providers_from_payload)
@@ -154,18 +165,21 @@ def _render_form_fields(  # noqa: C901
         max_value=1.0,
         value=float(state.get("llm_temperature", 0.0)),
         step=0.05,
+        disabled=disabled,
     )
 
     generator_prompt = st.text_area(
         "Generator System Core Prompt",
         value=str(state.get("generator_system_prompt", "")),
         height=150,
+        disabled=disabled,
     )
 
     judge_prompt = st.text_area(
         "LLM Judge Evaluation Core Prompt",
         value=str(state.get("judge_system_prompt", "")),
         height=150,
+        disabled=disabled,
     )
 
     return (
@@ -179,89 +193,107 @@ def _render_form_fields(  # noqa: C901
     )
 
 def _handle_save_action(
-    state: ConfigState,
-    api_key: str,
-    temp: float,
-    gen_prompt: str,
+    configuration_state: ConfigState,
+    application_programming_interface_key: str,
+    temperature: float,
+    generator_prompt: str,
     judge_prompt: str,
     chosen_engine: str,
     custom_name: str,
     recognized_provider: str,
 ) -> None:
     """Helper to process the save settings action."""
-    payload: dict[str, str | float | dict[str, str]] = {
-        "llm_temperature": temp,
-        "api_key_input": api_key,
-        "generator_system_prompt": gen_prompt,
+    configuration_payload: dict[str, str | float | dict[str, str]] = {
+        "llm_temperature": temperature,
+        "api_key_input": application_programming_interface_key,
+        "generator_system_prompt": generator_prompt,
         "judge_system_prompt": judge_prompt,
-        "database_endpoint": str(state.get("database_endpoint", "")),
+        "database_endpoint": str(configuration_state.get("database_endpoint", "")),
         "global_chosen_engine": chosen_engine,
         "custom_key_name": custom_name,
         "recognized_provider": recognized_provider,
     }
 
-    if _commit_runtime_update(payload):
-        st.session_state.local_config_state = payload
-        st.session_state.global_chosen_engine = chosen_engine
-        st.toast("Configurations successfully saved!")
-        st.rerun()
-    else:
+    configuration_update_was_successful = _commit_runtime_update(configuration_payload)
+    if not configuration_update_was_successful:
         st.error("Server synchronization rejected config schema")
+        return
 
-def _render_action_buttons(  # noqa: C901
-    state: ConfigState,
-    api_key: str,
-    temp: float,
-    gen_prompt: str,
+    st.session_state.local_config_state = configuration_payload
+    st.session_state.global_chosen_engine = chosen_engine
+    st.session_state.settings_saved_notification_flag = True
+    st.rerun()
+
+def _handle_reset_action() -> None:
+    """Helper to process the reset settings action."""
+    try:
+        backend_response = requests.post(RESET_API_URL, timeout=5)
+    except requests.exceptions.RequestException:
+        st.error("Failed to execute state transition")
+        return
+
+    response_status_code_is_successful = (backend_response.status_code == 200)
+    if not response_status_code_is_successful:
+        st.error("Server rejected factory reset request.")
+        return
+
+    del st.session_state.local_config_state
+    st.session_state.settings_reset_notification_flag = True
+    st.rerun()
+
+def _render_action_buttons(
+    configuration_state: ConfigState,
+    application_programming_interface_key: str,
+    temperature: float,
+    generator_prompt: str,
     judge_prompt: str,
     chosen_engine: str,
     custom_name: str,
     recognized_provider: str,
+    *,
+    disabled: bool,
 ) -> None:
     """Render Save/Reset buttons and handle their actions."""
     st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
 
-    unsaved_changes = False
+    has_unsaved_changes = False
 
-    if unsaved_changes:
+    if has_unsaved_changes:
         st.info(
             " Reminder: Don't forget to click 'Save Settings' "
             "to save your changes!"
         )
 
-    col1, col2 = st.columns(2)
+    column_one, column_two = st.columns(2)
 
-    with col1:
-        if st.button("Save Settings", type="primary", use_container_width=True):
-            _handle_save_action(
-                state,
-                api_key,
-                temp,
-                gen_prompt,
-                judge_prompt,
-                chosen_engine,
-                custom_name,
-                recognized_provider,
-            )
+    save_settings_button_was_clicked = column_one.button(
+        "Save Settings",
+        type="primary",
+        use_container_width=True,
+        disabled=disabled,
+    )
+    if save_settings_button_was_clicked:
+        _handle_save_action(
+            configuration_state,
+            application_programming_interface_key,
+            temperature,
+            generator_prompt,
+            judge_prompt,
+            chosen_engine,
+            custom_name,
+            recognized_provider,
+        )
 
-    with col2:
-        if st.button(
-            "Reset Default Settings", type="secondary", use_container_width=True
-        ):
-            try:
-                response = requests.post(RESET_API_URL, timeout=5)
-            except requests.exceptions.RequestException:
-                st.error("Failed to execute state transition")
-                return
-            if response.status_code != 200:
-                st.error("Server rejected factory reset request.")
-                return
+    reset_settings_button_was_clicked = column_two.button(
+        "Reset Default Settings",
+        type="secondary",
+        use_container_width=True,
+        disabled=disabled,
+    )
+    if reset_settings_button_was_clicked:
+        _handle_reset_action()
 
-            del st.session_state.local_config_state
-            st.toast("Factory settings successfully restored!")
-            st.rerun()
-
-def render_settings_view() -> None:
+def render_settings_view(*, disabled: bool) -> None:
     """Renders the UI elements"""
     st.header("System Settings")
 
@@ -271,32 +303,53 @@ def render_settings_view() -> None:
     if "local_config_state" not in st.session_state:
         return
 
-    state = st.session_state.local_config_state
+    configuration_state = st.session_state.local_config_state
+
+    has_settings_been_saved_successfully = st.session_state.get(
+        "settings_saved_notification_flag", False
+    )
+    if has_settings_been_saved_successfully:
+        st.toast("Settings Saved!")
+        st.session_state.settings_saved_notification_flag = False
+
+    has_settings_been_reset_successfully = st.session_state.get(
+        "settings_reset_notification_flag", False
+    )
+    if has_settings_been_reset_successfully:
+        st.toast("Settings reset!")
+        st.session_state.settings_reset_notification_flag = False
 
     (
-        api_key,
-        temp,
-        gen_prompt,
+        application_programming_interface_key,
+        temperature,
+        generator_prompt,
         judge_prompt,
         chosen_engine,
         custom_name,
         recognized_provider,
-    ) = _render_form_fields(state)
+    ) = _render_form_fields(configuration_state, disabled=disabled)
 
-    _render_custom_templates_section()
+    _render_custom_templates_section(disabled=disabled)
 
     _render_action_buttons(
-        state=state,
-        api_key=api_key,
-        temp=temp,
-        gen_prompt=gen_prompt,
+        configuration_state=configuration_state,
+        application_programming_interface_key=application_programming_interface_key,
+        temperature=temperature,
+        generator_prompt=generator_prompt,
         judge_prompt=judge_prompt,
         chosen_engine=chosen_engine,
         custom_name=custom_name,
         recognized_provider=recognized_provider,
+        disabled=disabled,
     )
 
-def _render_custom_templates_section() -> None:  # noqa: C901
+def _on_extract_clicked(name: str, desc: str) -> None:
+    st.session_state.is_extracting = True
+    st.session_state.pending_custom_template_name = name
+    st.session_state.pending_custom_template_desc = desc
+
+
+def _render_custom_templates_section(*, disabled: bool) -> None:  # noqa: C901
     st.markdown("---")
     st.header("Custom Form Templates")
     st.markdown(
@@ -305,37 +358,43 @@ def _render_custom_templates_section() -> None:  # noqa: C901
     )
 
     template_name = st.text_input(
-        "Template Name (e.g. DMP, MY_FORM)", key="custom_template_name_input"
+        "Template Name (e.g. DMP, MY_FORM)",
+        key="custom_template_name_input",
+        disabled=disabled,
     )
     template_desc = st.text_input(
-        "Description (optional)", key="custom_template_desc_input"
+        "Description (optional)", key="custom_template_desc_input", disabled=disabled
     )
     uploaded_file = st.file_uploader(
         "Upload template document",
         type=["txt", "md", "pdf", "docx"],
-        key="custom_template_file"
+        key="custom_template_file",
+        disabled=disabled,
     )
 
-    btn_disabled = not uploaded_file or not template_name.strip()
-    if (
-        st.button("Analyze & Extract Questions", type="primary", disabled=btn_disabled)
-        and uploaded_file
-        and template_name.strip()
-    ):
+    btn_disabled = disabled or not uploaded_file or not template_name.strip()
+
+    st.button(
+        "Analyze & Extract Questions",
+        type="primary",
+        disabled=btn_disabled,
+        on_click=_on_extract_clicked,
+        args=(template_name.strip(), template_desc.strip()),
+    )
+
+    if st.session_state.get("is_extracting"):
         with st.spinner("Extracting questions..."):
-                file_bytes = uploaded_file.read()
-                questions = extract_template_questions(file_bytes, uploaded_file.name)
-                if questions:
-                    st.session_state.pending_custom_template_questions = questions
-                    st.session_state.pending_custom_template_name = (
-                        template_name.strip()
-                    )
-                    st.session_state.pending_custom_template_desc = (
-                        template_desc.strip()
-                    )
-                    st.rerun()
-                else:
-                    st.error("Failed to extract questions from the document.")
+            file_bytes = st.session_state.custom_template_file.getvalue()
+            filename = st.session_state.custom_template_file.name
+            questions = extract_template_questions(file_bytes, filename)
+
+            st.session_state.is_extracting = False
+
+            if questions:
+                st.session_state.pending_custom_template_questions = questions
+            else:
+                st.error("Failed to extract questions from the document.")
+            st.rerun()
 
     if "pending_custom_template_questions" in st.session_state:
         st.markdown("### Review & Edit Questions")
@@ -345,17 +404,21 @@ def _render_custom_templates_section() -> None:  # noqa: C901
             updated_questions = []
             for index, question in enumerate(questions):
                 updated_question = st.text_area(
-                    f"Question {index+1}", value=question, key=f"custom_q_{index}"
+                    f"Question {index+1}",
+                    value=question,
+                    key=f"custom_q_{index}",
+                    disabled=disabled,
                 )
                 if updated_question.strip():
                     updated_questions.append(updated_question.strip())
 
             new_qs = st.text_area(
                 "Add new questions (one per line, optional)",
-                key="custom_q_new"
+                key="custom_q_new",
+                disabled=disabled
             )
 
-            if st.form_submit_button("Save Custom Template"):
+            if st.form_submit_button("Save Custom Template", disabled=disabled):
                 for line in new_qs.split('\n'):
                     if line.strip():
                         updated_questions.append(line.strip())
@@ -363,7 +426,9 @@ def _render_custom_templates_section() -> None:  # noqa: C901
                 name = st.session_state.pending_custom_template_name
                 desc = st.session_state.pending_custom_template_desc
                 if create_custom_template(name, updated_questions, desc):
-                    st.success(f"Template '{name}' saved successfully!")
+                    upper_name = name.upper()
+                    st.success(f"Template '{upper_name}' saved successfully!")
+                    st.session_state.selected_template = upper_name
                     del st.session_state.pending_custom_template_questions
                     del st.session_state.pending_custom_template_name
                     del st.session_state.pending_custom_template_desc

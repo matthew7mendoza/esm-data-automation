@@ -108,6 +108,17 @@ def _on_new_click() -> None:
     purge_active_view()
     st.session_state.history_selectbox = "Select a past run..."
 
+    current_selected_page = st.session_state.get("selected_template")
+    if current_selected_page != "SETTINGS":
+        return
+
+    currently_selected_template = st.session_state.get("template_selectbox")
+    if currently_selected_template is None:
+        return
+
+    st.session_state.selected_template = currently_selected_template
+
+
 
 def _on_delete_click(task_id: str | None) -> None:
     if not task_id:
@@ -228,7 +239,7 @@ def _on_rename_click(task_id: str | None) -> None:
 
 
 
-def render_historical_sidebar() -> None:
+def render_historical_sidebar(*, disabled: bool) -> None:
     """
     Fetches the history of completed tasks and displays
     them on the sidebar dropdown so users can scroll through past runs.
@@ -268,14 +279,12 @@ def render_historical_sidebar() -> None:
         task_display_options_mapping, currently_active_task_id
     )
 
-    is_job_running = bool(st.session_state.get("job_running"))
-
     st.sidebar.selectbox(
         "Reload a past analysis:",
         options=available_selection_options_list,
         key="history_selectbox",
         on_change=_on_history_change,
-        disabled=is_job_running,
+        disabled=disabled,
     )
 
     col1, col2 = st.sidebar.columns(2)
@@ -285,7 +294,7 @@ def render_historical_sidebar() -> None:
         key="new_run_sidebar_btn",
         type="secondary",
         use_container_width=True,
-        disabled=is_job_running,
+        disabled=disabled,
         on_click=_on_new_click,
     )
 
@@ -294,12 +303,12 @@ def render_historical_sidebar() -> None:
         key="delete_run_sidebar_btn",
         type="secondary",
         use_container_width=True,
-        disabled=not currently_active_task_id or is_job_running,
+        disabled=not currently_active_task_id or disabled,
         on_click=_on_delete_click,
         args=(currently_active_task_id,),
     )
 
-    if currently_active_task_id and not is_job_running:
+    if currently_active_task_id and not disabled:
         with st.sidebar.expander("Rename Current Run"):
             st.text_input("New Name", key="rename_input", label_visibility="collapsed")
             st.button(

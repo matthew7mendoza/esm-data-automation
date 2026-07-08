@@ -1,6 +1,7 @@
 """
 Assemble the complete application
 """
+
 import logging
 import os
 from typing import Final
@@ -125,21 +126,18 @@ def _process_pending_jobs() -> None:
         return
 
 
-def _render_template_button(
-    template_name: str, selected_page: str, disabled: bool) -> None:
-    btn_label = TEMPLATE_DISPLAY_NAMES.get(template_name, template_name)
-    is_active = template_name == selected_page
-    clicked = st.sidebar.button(
-        btn_label,
-        key=f"template_page_{template_name}",
-        type="primary" if is_active else "secondary",
-        width="stretch",
-        disabled=disabled,
+def _on_template_selected() -> None:
+    is_job_currently_running: bool = bool(
+        st.session_state.get("job_running") or st.session_state.get("is_extracting")
     )
-    if not clicked:
+    if is_job_currently_running:
         return
-    st.session_state.selected_template = template_name
-    st.rerun()
+
+    new_selected_template: str | None = st.session_state.get("template_selectbox")
+    if new_selected_template is None:
+        return
+
+    st.session_state.selected_template = new_selected_template
 
 
 def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
@@ -153,8 +151,21 @@ def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
         selected_page = OVERVIEW_PAGE
         st.session_state.selected_template = selected_page
 
-    for template_name in templates:
-        _render_template_button(template_name, selected_page, disabled)
+    if templates:
+        current_index = 0
+        if selected_page in templates:
+            current_index = templates.index(selected_page)
+
+        st.sidebar.selectbox(
+            "Select Template",
+            options=templates,
+            index=current_index,
+            format_func=lambda t: TEMPLATE_DISPLAY_NAMES.get(t, t),
+            disabled=disabled,
+            key="template_selectbox",
+            on_change=_on_template_selected,
+            label_visibility="collapsed",
+        )
 
     return selected_page
 
@@ -208,7 +219,7 @@ def _render_sidebar(
         templates=available_templates,
     )
 
-    render_historical_sidebar()
+    render_historical_sidebar(disabled=is_running)
 
     st.sidebar.markdown(
         "<div style='font-size: 0.75rem; font-weight: 700; "
@@ -243,7 +254,9 @@ def main() -> None:  # noqa: C901
     _initialize_session_state()
     _process_pending_jobs()
 
-    is_running: bool = bool(st.session_state.get("job_running"))
+    is_running: bool = bool(
+        st.session_state.get("job_running") or st.session_state.get("is_extracting")
+    )
 
     if is_running:
         st.warning("Active AI job currently running...")
@@ -256,37 +269,45 @@ def main() -> None:  # noqa: C901
         if fetched:
             st.session_state.local_config_state = fetched
 
-    if "local_config_state" in st.session_state:
-        custom_name = st.session_state.local_config_state.get("custom_key_name")
-        if custom_name and custom_name not in available_models:
-            available_models.append(str(custom_name))
+    configuration_state = st.session_state.get("local_config_state")
+    custom_key_providers = {}
+    if configuration_state is not None:
+        custom_key_providers = configuration_state.get("custom_key_providers") or {}
 
-    selected_page: str = _render_sidebar(
-        is_running, available_templates
-    )
+    custom_model_names = [
+        str(custom_key_name)
+        for custom_key_name in custom_key_providers
+        if custom_key_name not in available_models
+    ]
+    available_models.extend(custom_model_names)
+
+    selected_page: str = _render_sidebar(is_running, available_templates)
 
     if selected_page == SETTINGS_PAGE:
-        render_settings_view()
+        render_settings_view(disabled=is_running)
         return
 
     st.title("ESM Data Automation Pipeline")
 
     if selected_page == OVERVIEW_PAGE:
-        render_overview_view()
+        render_overview_view(disabled=is_running)
         return
 
     currently_active_task_id = st.session_state.get("current_task_id")
     _render_active_run_header(currently_active_task_id)
 
-    tab_generator, tab_judge = st.tabs(["Document Generator", "LLM Judge Evaluation"])
+    generator_navigation_tab, judge_evaluation_navigation_tab = st.tabs(
+        ["Document Generator", "LLM Judge Evaluation"],
+        key="main_workflow_navigation_tabs",
+    )
 
-    with tab_generator:
+    with generator_navigation_tab:
         render_generator_tab_view(
             disabled=is_running,
             target_document=selected_page,
         )
 
-    with tab_judge:
+    with judge_evaluation_navigation_tab:
         render_judge_tab_view(
             disabled=is_running,
             models=available_models,
