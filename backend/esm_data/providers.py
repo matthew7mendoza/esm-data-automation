@@ -169,45 +169,50 @@ BUILTIN_PROVIDERS = {
 def get_provider(  # noqa: C901
     name: str | None = None, **kwargs: Unpack[ProviderArgs]
 ) -> LLMProvider:
+    """Resolves the correct provider instance matching active configurations."""
     raw_choice = name or os.environ.get("DEFAULT_PROVIDER", "gemini")
-    clean = raw_choice.lower()
-
-    for trigger, provider_id in BUILTIN_PROVIDERS.items():
-        if trigger not in clean:
-            continue
-        if provider_id not in _REGISTRY:
-            message = f"Built-in provider '{provider_id}' is not registered."
-            raise ValueError(message)
-        return _REGISTRY[provider_id](**kwargs)
+    clean_name = raw_choice.lower()
 
     active_config = settings_engine.get_current()
     matched_key = next(
-        (key for key in active_config.custom_key_providers if key.lower() == clean),
+        (key for key in active_config.custom_key_providers if key.lower() == clean_name),  # noqa: E501
         None,
     )
 
-    if matched_key:
-        provider_type = active_config.custom_key_providers[matched_key].lower()
-        if provider_type not in _REGISTRY:
-            message = (
-                f"Custom provider type '{provider_type}' "
-                f"for key '{matched_key}' is not registered."
-            )
-            raise ValueError(message)
+    custom_provider_type = ""
+    if matched_key is not None:
+        custom_provider_type = active_config.custom_key_providers[matched_key].lower()
 
-        factory_kwargs = {**kwargs}
-        if "api_key" not in factory_kwargs and (
-            custom_api_key := active_config.custom_api_keys.get(matched_key)
-        ):
-            factory_kwargs["api_key"] = custom_api_key
+    is_unregistered_custom = matched_key is not None and custom_provider_type not in _REGISTRY  # noqa: E501
+    if is_unregistered_custom:
+        raise ValueError(
+            f"Custom provider type '{custom_provider_type}' for key '{matched_key}' is not registered."  # noqa: E501
+        )
 
-        return _REGISTRY[provider_type](**factory_kwargs)
+    if matched_key is not None:
+        custom_api_key = active_config.custom_api_keys.get(matched_key)
+        factory_kwargs = {"api_key": custom_api_key, **kwargs} if custom_api_key else {**kwargs}  # noqa: E501
+        return _REGISTRY[custom_provider_type](**factory_kwargs)
 
-    if clean not in _REGISTRY:
-        message = f"Unknown LLM provider: {clean}"
-        raise ValueError(message)
+    matched_trigger = next(
+        (trigger for trigger in BUILTIN_PROVIDERS if trigger in clean_name),
+        None,
+    )
 
-    return _REGISTRY[clean](**kwargs)
+    is_builtin_matched = matched_trigger is not None
+    provider_id = BUILTIN_PROVIDERS[cast(str, matched_trigger)] if is_builtin_matched else ""  # noqa: E501
+
+    is_unregistered_builtin = is_builtin_matched and provider_id not in _REGISTRY
+    if is_unregistered_builtin:
+        raise ValueError(f"Built-in provider '{provider_id}' is not registered.")
+
+    if is_builtin_matched:
+        return _REGISTRY[provider_id](**kwargs)
+
+    if clean_name not in _REGISTRY:
+        raise ValueError(f"Unknown LLM provider: {clean_name}")
+
+    return _REGISTRY[clean_name](**kwargs)
 
 def _nemotron_factory(**kwargs: Unpack[ProviderArgs]) -> LLMProvider:
     api_key = kwargs.get("api_key") or os.environ.get("NVIDIA_API_KEY", "")

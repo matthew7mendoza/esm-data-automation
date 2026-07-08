@@ -270,7 +270,7 @@ def main() -> None:  # noqa: C901
             st.session_state.local_config_state = fetched
 
     configuration_state = st.session_state.get("local_config_state")
-    custom_key_providers = {}
+    custom_key_providers: dict[str, str] = {}
     if configuration_state is not None:
         custom_key_providers = configuration_state.get("custom_key_providers") or {}
 
