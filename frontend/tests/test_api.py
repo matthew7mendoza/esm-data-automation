@@ -3,7 +3,6 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from backend.esm_data.models import TaskId
 from frontend.client import (
     fetch_all_historical_tasks,
     fetch_server_templates,
@@ -11,6 +10,7 @@ from frontend.client import (
     update_task_report,
 )
 from frontend.protocols import TaskProfileDict
+from shared.models import TaskId
 
 
 class TestFrontendAPIClient:
@@ -49,7 +49,9 @@ class TestFrontendAPIClient:
         mock_response.json.return_value = {"task_id": "1234", "status": "COMPLETED"}
         mock_get.return_value = mock_response
 
-        result: TaskProfileDict | None = get_task_profile(task_id=TaskId("1234"))
+        result: TaskProfileDict | None = get_task_profile(
+            task_identifier=TaskId("1234")
+        )
         assert result == cast(
             TaskProfileDict, {"task_id": "1234", "status": "COMPLETED"}
         )
@@ -59,7 +61,9 @@ class TestFrontendAPIClient:
         self, mock_get: MagicMock
     ) -> None:
         mock_get.side_effect = requests.exceptions.ConnectionError("Server dead")
-        result: TaskProfileDict | None = get_task_profile(task_id=TaskId("1234"))
+        result: TaskProfileDict | None = get_task_profile(
+            task_identifier=TaskId("1234")
+        )
         assert result is None
 
     @patch("frontend.client.requests.get")
@@ -67,7 +71,9 @@ class TestFrontendAPIClient:
         mock_response: MagicMock = MagicMock()
         mock_response.status_code = 404
         mock_get.return_value = mock_response
-        result: TaskProfileDict | None = get_task_profile(task_id=TaskId("1234"))
+        result: TaskProfileDict | None = get_task_profile(
+            task_identifier=TaskId("1234")
+        )
         assert result is None
 
     @patch("frontend.client.requests.get")
@@ -98,7 +104,9 @@ class TestFrontendAPIClient:
         mock_patch.return_value = mock_response
 
         result: bool = update_task_report(
-            task_id="1234", extracted_answers={"Q1": "A1"}, missing_information=[]
+            task_identifier="1234",
+            extracted_answers={"Q1": "A1"},
+            missing_information=[],
         )
         assert result is True
         mock_patch.assert_called_once()
@@ -107,6 +115,8 @@ class TestFrontendAPIClient:
     def test_update_task_report_failure(self, mock_patch: MagicMock) -> None:
         mock_patch.side_effect = requests.exceptions.Timeout("Connection timed out")
         result: bool = update_task_report(
-            task_id="1234", extracted_answers={"Q1": "A1"}, missing_information=[]
+            task_identifier="1234",
+            extracted_answers={"Q1": "A1"},
+            missing_information=[],
         )
         assert result is False

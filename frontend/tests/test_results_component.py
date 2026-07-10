@@ -94,7 +94,7 @@ class TestResultsComponentRender:
         render_answers_and_missing_sections()
 
         mock_update.assert_called_once_with(
-            task_id="test-task",
+            task_identifier="test-task",
             extracted_answers={
                 "Question 1": "Answer 1 Edited",
                 "Question 2": "Answer 2 Filled",

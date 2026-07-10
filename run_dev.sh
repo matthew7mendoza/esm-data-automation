@@ -18,6 +18,6 @@ done
 sleep 1.5 
 
 echo "Starting frontend..."
-streamlit run frontend/app.py
+PYTHONPATH=. streamlit run frontend/app.py
 
 wait

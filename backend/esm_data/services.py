@@ -16,13 +16,13 @@ from backend.esm_data.database import async_session_creator
 from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
 from backend.esm_data.document import EXTRACTOR_MAP, extract_text
 from backend.esm_data.generator import DocumentGenerator
-from backend.esm_data.models import (
+from backend.esm_data.providers import get_provider
+from shared.models import (
     AgentConfigurationError,
     AgentExecutionError,
     ExtractionReport,
     TaskId,
 )
-from backend.esm_data.providers import get_provider
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 cpu_process_pool: Final[ProcessPoolExecutor] = ProcessPoolExecutor(max_workers=2)

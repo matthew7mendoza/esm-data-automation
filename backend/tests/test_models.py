@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from backend.esm_data.models import (
+from shared.models import (
     AgentConfigurationError,
     AgentExecutionError,
     AnswerPair,

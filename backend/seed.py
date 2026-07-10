@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from backend.esm_data.database import async_session_creator, init_db_tables
 from backend.esm_data.db_models import FormTemplate, TemplateQuestion
 from backend.esm_data.generator import TemplateConfig
-from backend.esm_data.models import TemplateName
+from shared.models import TemplateName
 
 __all__ = ["add_single_template", "seed_data_from_yaml"]
 

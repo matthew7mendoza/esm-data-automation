@@ -31,7 +31,7 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["backend*", "frontend*"]
+include = ["backend*", "frontend*", "shared*"]
 
 [project.optional-dependencies]
 dev = [

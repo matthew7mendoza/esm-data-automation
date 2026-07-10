@@ -13,7 +13,8 @@ import openai
 import yaml
 
 from backend.esm_data.document import EXTRACTOR_MAP, extract_text
-from backend.esm_data.models import (
+from backend.esm_data.providers import LLMProvider
+from shared.models import (
     AgentConfigurationError,
     AgentExecutionError,
     CorruptedDocumentError,
@@ -21,7 +22,6 @@ from backend.esm_data.models import (
     ExtractionReport,
     FormResponses,
 )
-from backend.esm_data.providers import LLMProvider
 
 __all__ = ["DocumentGenerator", "TemplateConfig"]
 logger = logging.getLogger(__name__)
