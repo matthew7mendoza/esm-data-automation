@@ -9,7 +9,7 @@ from typing import Final
 
 from markitdown import MarkItDown
 
-from backend.esm_data.models import CorruptedDocumentError, DocumentExtractionError
+from shared.models import CorruptedDocumentError, DocumentExtractionError
 
 __all__ = ["EXTRACTOR_MAP", "extract_text"]
 

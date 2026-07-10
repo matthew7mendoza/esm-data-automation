@@ -39,7 +39,14 @@ from backend.esm_data.database import (
 from backend.esm_data.db_models import FormTemplate, Task, TemplateQuestion
 from backend.esm_data.document import extract_text
 from backend.esm_data.judge import AuditStressTestReport, LLMJudge
-from backend.esm_data.models import (
+from backend.esm_data.providers import get_provider
+from backend.esm_data.services import (
+    cpu_process_pool,
+    run_heavy_processing,
+    stage_incoming_files_and_register_task,
+)
+from backend.seed import seed_data_from_yaml
+from shared.models import (
     AuditRequest,
     TaskId,
     TaskRenameRequest,
@@ -48,13 +55,6 @@ from backend.esm_data.models import (
     TemplateCreateRequest,
     TemplateQuestionsExtraction,
 )
-from backend.esm_data.providers import get_provider
-from backend.esm_data.services import (
-    cpu_process_pool,
-    run_heavy_processing,
-    stage_incoming_files_and_register_task,
-)
-from backend.seed import seed_data_from_yaml
 
 __all__ = ["app"]
 

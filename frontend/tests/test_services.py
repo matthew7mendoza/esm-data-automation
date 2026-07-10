@@ -62,7 +62,7 @@ class TestFrontendServices:
         )
 
         assert result is None
-        mock_st.error.assert_any_call("Communication loss with audit server: Timeout")
+        mock_st.error.assert_any_call("Audit server connection timed out. Timeout")
 
     @patch("frontend.services.time.sleep")
     @patch("frontend.services.get_task_profile")
@@ -128,5 +128,5 @@ class TestFrontendServices:
         )
 
         mock_st.error.assert_called_with(
-            "Could not reach background API layer... Error: Connection fail"
+            "Failed to connect to backend layer. Connection fail"
         )

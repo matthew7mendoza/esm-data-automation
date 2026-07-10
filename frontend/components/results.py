@@ -159,7 +159,7 @@ def render_answers_and_missing_sections(*, disabled: bool = False) -> None:
             return
 
         success = update_task_report(
-            task_id=current_task_id,
+            task_identifier=current_task_id,
             extracted_answers=updated_extracted,
             missing_information=updated_missing,
         )

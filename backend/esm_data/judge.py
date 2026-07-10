@@ -20,13 +20,13 @@ from backend.esm_data.metrics import (
     calculate_percentage_agreement,
     calculate_reasoning_stability,
 )
-from backend.esm_data.models import (
+from backend.esm_data.providers import LLMProvider
+from shared.models import (
     AgentConfigurationError,
     ComplianceScoringSchema,
     ItemId,
     RubricItemConfig,
 )
-from backend.esm_data.providers import LLMProvider
 
 __all__ = [
     "AuditReportMetadata",

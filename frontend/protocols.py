@@ -4,7 +4,7 @@ Defines duck type structured interfance & schemas
 
 from typing import Protocol, TypedDict
 
-from backend.esm_data.models import ExtractionReport, TaskId
+from shared.models import ExtractionReport, TaskId
 
 __all__ = ["TaskProfileDict", "UploadedFileProtocol"]
 
