@@ -12,11 +12,6 @@ from frontend.client import fetch_server_templates
 from frontend.components.sidebar import (
     render_historical_sidebar,
 )
-from frontend.protocols import (
-    AuditArgsPayload,
-    GenerationArgsPayload,
-)
-from frontend.services import send_audit_request, send_generation_request
 from frontend.ui_constants import (
     MODEL_CONFIGURATIONS,
     TEMPLATE_DISPLAY_NAMES,
@@ -25,12 +20,14 @@ from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
 from frontend.views.overview import render_overview_view
 from frontend.views.settings import _fetch_active_settings, render_settings_view
+from frontend.views.tracker import render_tracker_view
 
 __all__ = ["main"]
 
 logger: Final[logging.Logger] = logging.getLogger(__name__)
 OVERVIEW_PAGE: Final[str] = "OVERVIEW"
 SETTINGS_PAGE: Final[str] = "SETTINGS"
+TRACKER_PAGE: Final[str] = "TRACKER"
 
 
 def inject_global_theme() -> None:
@@ -66,66 +63,6 @@ def _initialize_session_state() -> None:
         st.session_state.global_chosen_engine = st.session_state.available_models[0]
 
 
-def _handle_pending_generation(generation_args: GenerationArgsPayload) -> None:
-    send_generation_request(
-        target_document=generation_args["target_document"],
-        chosen_engine=generation_args["chosen_engine"],
-        uploaded_files=generation_args["uploaded_files"],
-        custom_name=generation_args["custom_name"],
-    )
-    st.session_state.job_running = False
-    st.rerun()
-
-
-def _handle_pending_audit(audit_args: AuditArgsPayload) -> None:
-    task_id: str = audit_args["task_id"]
-    metrics = send_audit_request(
-        chosen_engine=audit_args["chosen_engine"],
-        answers=audit_args["answers"],
-        judge_iterations=audit_args["judge_iterations"],
-        source_context=audit_args["source_context"],
-    )
-    st.session_state.job_running = False
-    if not metrics:
-        st.rerun()
-        return
-
-    st.session_state.audit_metrics = metrics
-    historical_audits = st.session_state.get("historical_audits")
-    if not isinstance(historical_audits, dict):
-        historical_audits = {}
-    historical_audits[task_id] = metrics
-    st.session_state.historical_audits = historical_audits
-    st.rerun()
-
-
-def _should_execute_pending_job() -> bool:
-    if not st.session_state.get("job_running"):
-        return False
-    run_state = st.session_state.get("run_state", "idle")
-    if run_state == "triggered":
-        st.session_state.run_state = "executing"
-        return False
-    if run_state != "executing":
-        return False
-    st.session_state.run_state = "idle"
-    return True
-
-
-def _process_pending_jobs() -> None:
-    """Executes queued background tasks then refreshes the app."""
-    if not _should_execute_pending_job():
-        return
-
-    if "pending_generation" in st.session_state:
-        _handle_pending_generation(st.session_state.pop("pending_generation"))
-        return
-
-    if "pending_audit" in st.session_state:
-        _handle_pending_audit(st.session_state.pop("pending_audit"))
-        return
-
-
 def _on_template_selected() -> None:
     is_job_currently_running: bool = bool(
         st.session_state.get("job_running") or st.session_state.get("is_extracting")
@@ -145,6 +82,7 @@ def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
     is_invalid = (
         selected_page != OVERVIEW_PAGE
         and selected_page != SETTINGS_PAGE
+        and selected_page != TRACKER_PAGE
         and selected_page not in templates
     )
     if is_invalid:
@@ -164,7 +102,6 @@ def _render_sidebar_navigation(*, disabled: bool, templates: list[str]) -> str:
             disabled=disabled,
             key="template_selectbox",
             on_change=_on_template_selected,
-            label_visibility="collapsed",
         )
 
     return selected_page
@@ -180,7 +117,7 @@ def _render_active_run_header(currently_active_task_id: str | None) -> None:
     st.markdown(f"### Active Run: **{custom_name}**")
 
 
-def _render_sidebar(
+def _render_sidebar(  # noqa: C901
     is_running: bool,
     available_templates: list[str],
 ) -> str:
@@ -189,11 +126,15 @@ def _render_sidebar(
     is_invalid = (
         selected_page != OVERVIEW_PAGE
         and selected_page != SETTINGS_PAGE
+        and selected_page != TRACKER_PAGE
         and selected_page not in available_templates
     )
     if is_invalid:
         selected_page = OVERVIEW_PAGE
         st.session_state.selected_template = selected_page
+
+    if selected_page in (OVERVIEW_PAGE, TRACKER_PAGE):
+        return selected_page
 
     overview_clicked = st.sidebar.button(
         "Overview",
@@ -205,14 +146,6 @@ def _render_sidebar(
     if overview_clicked:
         st.session_state.selected_template = OVERVIEW_PAGE
         st.rerun()
-
-    st.sidebar.markdown(
-        "<div style='font-size: 0.75rem; font-weight: 700; "
-        "letter-spacing: 0.05em; color: #6b7280; text-transform: uppercase; "
-        "margin-top: 1.5rem; margin-bottom: 0.5rem; padding-left: 12px;'>"
-        "Form Templates</div>",
-        unsafe_allow_html=True,
-    )
 
     selected_page = _render_sidebar_navigation(
         disabled=is_running,
@@ -247,16 +180,16 @@ def _render_sidebar(
 
 def main() -> None:  # noqa: C901
     """Core coordination routine. Targets low indentation depths via guard clauses."""
-    st.set_page_config(page_title="ESM Data Automation", layout="wide")
+    st.set_page_config(
+        page_title="ESM Data Automation",
+        layout="centered",
+        initial_sidebar_state="expanded",
+    )
 
     inject_global_theme()
 
     _initialize_session_state()
-    _process_pending_jobs()
-
-    is_running: bool = bool(
-        st.session_state.get("job_running") or st.session_state.get("is_extracting")
-    )
+    is_running: bool = bool(st.session_state.get("is_extracting"))
 
     if is_running:
         st.warning("Active AI job currently running...")
@@ -269,18 +202,6 @@ def main() -> None:  # noqa: C901
         if fetched:
             st.session_state.local_config_state = fetched
 
-    configuration_state = st.session_state.get("local_config_state")
-    custom_key_providers: dict[str, str] = {}
-    if configuration_state is not None:
-        custom_key_providers = configuration_state.get("custom_key_providers") or {}
-
-    custom_model_names = [
-        str(custom_key_name)
-        for custom_key_name in custom_key_providers
-        if custom_key_name not in available_models
-    ]
-    available_models.extend(custom_model_names)
-
     selected_page: str = _render_sidebar(is_running, available_templates)
 
     if selected_page == SETTINGS_PAGE:
@@ -291,6 +212,10 @@ def main() -> None:  # noqa: C901
 
     if selected_page == OVERVIEW_PAGE:
         render_overview_view(disabled=is_running)
+        return
+
+    if selected_page == TRACKER_PAGE:
+        render_tracker_view(disabled=is_running)
         return
 
     currently_active_task_id = st.session_state.get("current_task_id")

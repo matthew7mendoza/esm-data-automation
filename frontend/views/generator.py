@@ -7,6 +7,8 @@ from typing import cast
 import streamlit as st
 
 from frontend.components.results import render_answers_and_missing_sections
+from frontend.protocols import UploadedFileProtocol
+from frontend.services import send_generation_request
 from frontend.ui_constants import TEMPLATE_DESCRIPTIONS, TEMPLATE_DISPLAY_NAMES
 from frontend.utils.document import build_final_document_string, create_docx_buffer
 
@@ -54,14 +56,13 @@ def _render_step_one_upload(*, disabled: bool, target_document: str) -> None:
     if not trigger_generation:
         return
 
-    st.session_state.job_running = True
-    st.session_state.run_state = "triggered"
-    st.session_state.pending_generation = {
-        "target_document": target_document,
-        "chosen_engine": st.session_state.get("global_chosen_engine", "Gemini"),
-        "uploaded_files": uploaded_files,
-        "custom_name": custom_name,
-    }
+    with st.spinner("Writing Documentation..."):
+        send_generation_request(
+            target_document=target_document,
+            chosen_engine=str(st.session_state.get("global_chosen_engine", "Gemini")),
+            uploaded_files=cast(list[UploadedFileProtocol], uploaded_files),
+            custom_name=str(custom_name),
+        )
     st.rerun()
 
 

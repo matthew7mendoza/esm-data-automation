@@ -8,6 +8,7 @@ import streamlit as st
 
 from frontend.client import fetch_all_historical_tasks
 from frontend.components.results import render_trust_audit_ledger
+from frontend.services import send_audit_request
 
 __all__ = ["render_judge_tab_view"]
 
@@ -51,15 +52,22 @@ def _trigger_stability_test(
     if isinstance(report_data, dict):
         extracted_answers_dict = report_data.get("extracted_answers", {})
 
-    st.session_state.job_running = True
-    st.session_state.run_state = "triggered"
-    st.session_state.pending_audit = {
-        "task_id": task_id,
-        "chosen_engine": chosen_engine,
-        "judge_iterations": judge_iterations,
-        "answers": extracted_answers_dict,
-        "source_context": active_task_data.get("source_context", ""),
-    }
+    with st.spinner("Running AI Judge evaluation..."):
+        metrics = send_audit_request(
+            chosen_engine=chosen_engine,
+            answers=cast(dict[str, str], extracted_answers_dict),
+            judge_iterations=judge_iterations,
+            source_context=cast(str, active_task_data.get("source_context", "")),
+        )
+
+    if metrics:
+        st.session_state.audit_metrics = metrics
+        historical_audits = st.session_state.get("historical_audits")
+        if not isinstance(historical_audits, dict):
+            historical_audits = {}
+        historical_audits[task_id] = metrics
+        st.session_state.historical_audits = historical_audits
+
     st.rerun()
 
 

@@ -24,82 +24,74 @@ def render_overview_view(*, disabled: bool) -> None:
                 max-width: 800px;">
                 Accelerate scientific data stewardship. Extract structured
                 metadata and build high-quality dataset documentation
-                (READMEs, NOAA Data Management Plans) directly from
-                publications and source files.
+                directly from your workflow.
             </p>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    st.markdown("### Key Capabilities")
+    st.markdown("### Select Your Workflow")
 
-    col1, col2 = st.columns(2)
+    column_one, column_two = st.columns(2)
 
-    with col1:
+    with column_one:
         st.markdown(
             """
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0;
                 border-radius: 12px; padding: 20px; margin-bottom: 20px;
-                min-height: 180px; transition: transform 0.2s ease;">
+                height: 220px; transition: transform 0.2s ease;">
                 <h4 style="margin-top: 0; color: #1e3a8a; display: flex;
                     align-items: center; gap: 8px;">
-                    Document Generator
+                    Start a New Experiment (Metadata Tracker)
                 </h4>
                 <p style="color: #475569; font-size: 0.9rem; line-height: 1.5;
                     margin-bottom: 0;">
-                    Upload dataset files, scientific papers, or metadata dumps
-                    to generate standard formats. Edit answers on the fly,
-                    review missing information, and export files as Word
-                    (.docx) or Markdown (.md).
+                    Set up automated, zero-touch metadata tracking for a new
+                    or ongoing model run on PPAN. Never write a Data
+                    Management Plan manually again.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
+        start_tracking_button_clicked = st.button(
+            "Start Tracking",
+            key="button_start_tracking",
+            type="primary",
+            disabled=disabled,
+            use_container_width=True,
+        )
+        if start_tracking_button_clicked:
+            st.session_state.selected_template = "TRACKER"
+            st.rerun()
 
-    with col2:
+    with column_two:
         st.markdown(
             """
             <div style="background-color: #f8fafc; border: 1px solid #e2e8f0;
                 border-radius: 12px; padding: 20px; margin-bottom: 20px;
-                min-height: 180px; transition: transform 0.2s ease;">
+                height: 220px; transition: transform 0.2s ease;">
                 <h4 style="margin-top: 0; color: #1e3a8a; display: flex;
                     align-items: center; gap: 8px;">
-                    LLM Judge Evaluation
+                    Retroactive Form Automation (The Typer)
                 </h4>
                 <p style="color: #475569; font-size: 0.9rem; line-height: 1.5;
                     margin-bottom: 0;">
-                    Audit and score historical extraction runs. Run
-                    multi-iteration stability tests to compute item-level
-                    agreement scores (Gwet's AC1) and verify accuracy against
-                    the source documents.
+                    Already have your data and PDFs? Upload them here to have
+                    AI instantly generate your compliance forms.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
-
-    st.markdown("### Workflow Overview")
-    st.markdown(
-        """
-        1. **Select a template** from the sidebar navigation
-           (e.g. README or Data Management Plan).
-        2. **Upload reference files** (scientific text files, publications,
-           netCDF headers) and trigger AI generation.
-        3. **Review and edit** the generated fields directly in the tabbed
-           interface to fill in missing details.
-        4. **Download** your final curated document in Markdown or Word.
-        5. **Audit the run** in the LLM Judge tab to inspect agreement
-           scores and ensure output stability.
-        """
-    )
-
-    st.markdown(
-        "<div style='margin-top: 2rem; margin-bottom: 1rem;'>",
-        unsafe_allow_html=True,
-    )
-    if st.button("Start Generating Documentation", type="primary", disabled=disabled):
-        st.session_state.selected_template = "README"
-        st.rerun()
-    st.markdown("</div>", unsafe_allow_html=True)
+        automate_forms_button_clicked = st.button(
+            "Automate Existing Forms",
+            key="button_automate_forms",
+            type="primary",
+            disabled=disabled,
+            use_container_width=True,
+        )
+        if automate_forms_button_clicked:
+            st.session_state.selected_template = "README"
+            st.rerun()
