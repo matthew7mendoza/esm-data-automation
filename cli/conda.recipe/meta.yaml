@@ -1,0 +1,39 @@
+{% set name = "esm-tracker" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  noarch: python
+  script: {{ PYTHON }} -m pip install . -vv
+  entry_points:
+    - esm-tracker = esm_tracker.cli:main
+
+requirements:
+  host:
+    - python >=3.10
+    - pip
+    - setuptools >=61.0.0
+    - wheel
+  run:
+    - python >=3.10
+    - xarray >=2023.0.0
+    - netcdf4 >=1.6.0
+    - pyyaml >=6.0.0
+    - requests >=2.28.0
+    - watchdog >=3.0.0
+
+test:
+  commands:
+    - esm-tracker --help
+
+about:
+  home: "https://github.com/NOAA-GFDL/esm-form-automation"
+  summary: "A lightweight CLI spider for extracting metadata from NetCDF files."
+  license: "MIT"
+  license_family: "MIT"
