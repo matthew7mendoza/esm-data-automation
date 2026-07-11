@@ -14,6 +14,13 @@ JUDGE_INSTRUCTIONS: |
   3. Explain your reasoning and any changes in meaning before picking a value.
   4. Separate your evaluations strictly into Objective and Subjective categories.
 
+YAML_CONTEXT_INSTRUCTIONS: |
+  CRITICAL CONTEXT INSTRUCTION:
+  You have been provided with an automated YAML metadata extraction from NetCDF files.
+  Treat the file sizes, dimensions, and variables listed in the YAML as absolute mathematical truth.
+  Map any custom variable names you see to standard CF-conventions based on your climate modeling knowledge.
+  If any PDF paper contradicts the YAML, the YAML is correct.
+
 DOCUMENT_TEMPLATES:
   DMP:
     questions:

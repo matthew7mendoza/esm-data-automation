@@ -45,17 +45,19 @@ def _extract_complex_doc(path: Path, /) -> str:
         raise DocumentExtractionError(
             f"System unable to proccess file read at '{path.name}'"
         ) from os_error
-    except ValueError as val_error:
+    except ValueError as value_error:
         logger.error(f"MarkItDown unable to parse {path.name}", exc_info=True)
         raise CorruptedDocumentError(
             f"Invalid structure mapping in: '{path.name}'"
-        ) from val_error
+        ) from value_error
 
 
 EXTRACTOR_MAP: Final[dict[str, Callable[[Path], str]]] = {
     ".txt": _extract_plain_text,
     ".md": _extract_plain_text,
     ".csv": _extract_plain_text,
+    ".yaml": _extract_plain_text,
+    ".yml": _extract_plain_text,
     ".pdf": _extract_complex_doc,
     ".docx": _extract_complex_doc,
     ".xlsx": _extract_complex_doc,
@@ -77,4 +79,5 @@ def extract_text(file_path: str | Path, /) -> str:
             f"Unsupported file format mapping request: '{path.suffix.lower()}'"
         )
 
+    logger.debug(f"Extracting text from {path.name} using mapped extractor.")
     return extractor_function(path).strip()

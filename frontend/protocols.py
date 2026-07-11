@@ -17,11 +17,13 @@ class TaskProfileDict(TypedDict):
     source_context: str | None
     detail: str | None
 
+
 class UploadedFileProtocol(Protocol):
     name: str
     type: str
 
     def getvalue(self) -> bytes: ...
+
 
 class GenerationArgsPayload(TypedDict):
     target_document: str
@@ -29,12 +31,14 @@ class GenerationArgsPayload(TypedDict):
     uploaded_files: list[UploadedFileProtocol]
     custom_name: str
 
+
 class AuditArgsPayload(TypedDict):
     task_id: str
     chosen_engine: str
     answers: dict[str, str]
     judge_iterations: int
     source_context: str
+
 
 class ConfigState(TypedDict, total=False):
     api_key_input: str
@@ -46,4 +50,3 @@ class ConfigState(TypedDict, total=False):
     custom_key_name: str
     recognized_provider: str
     custom_key_providers: dict[str, str]
-

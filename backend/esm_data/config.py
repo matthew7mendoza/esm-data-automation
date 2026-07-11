@@ -1,6 +1,7 @@
 """
 Isolate static configurations, file cache mechanisms, and runtime parameter maps.
 """
+
 import json
 import logging
 import os
@@ -38,6 +39,7 @@ class PipelineSettings(BaseModel):
     api_key_input: str = Field("")
     generator_system_prompt: str = Field("")
     judge_system_prompt: str = Field("")
+    yaml_system_prompt: str = Field("")
     database_endpoint: str = Field("sqlite+aiosqlite:///data/tasks.db")
     global_chosen_engine: str = Field("gemini")
     custom_key_name: str = Field("")
@@ -70,9 +72,7 @@ class ConfigurationManager:
 
     def _load_yaml_baselines(self) -> dict[str, str]:
         """Reads static deployment blueprints from project layout file layers."""
-        yaml_path: Final[Path] = (
-            Path(str(files("backend.esm_data"))) / "templates.yaml"
-        )
+        yaml_path: Final[Path] = Path(str(files("backend.esm_data"))) / "templates.yaml"
 
         if not yaml_path.exists():
             return {"generator_prompt": "", "judge_prompt": ""}
@@ -88,21 +88,19 @@ class ConfigurationManager:
             raise ConfigError("Invalid YAML syntax parsed") from error
 
         return {
-            "generator_prompt": str(
-                raw.get("DEFAULT_LLM_INSTRUCTIONS", "")
-            ).strip(),
+            "generator_prompt": str(raw.get("DEFAULT_LLM_INSTRUCTIONS", "")).strip(),
             "judge_prompt": str(raw.get("JUDGE_INSTRUCTIONS", "")).strip(),
+            "yaml_prompt": str(raw.get("YAML_CONTEXT_INSTRUCTIONS", "")).strip(),
         }
 
     def _initialize_state(self) -> PipelineSettings:
         """Constructs starting operational contexts using environment fallbacks."""
         init_args: Final[dict[str, object]] = {
             "llm_temperature": 0.0,
-            "api_key_input": os.environ.get(
-                "ESM_API_KEY", "PROD_SECRET_TOKEN_MOCK"
-            ),
+            "api_key_input": os.environ.get("ESM_API_KEY", "PROD_SECRET_TOKEN_MOCK"),
             "generator_system_prompt": self._baselines["generator_prompt"],
             "judge_system_prompt": self._baselines["judge_prompt"],
+            "yaml_system_prompt": self._baselines["yaml_prompt"],
             "database_endpoint": os.environ.get(
                 "DATABASE_URL", "sqlite+aiosqlite:///data/tasks.db"
             ),
@@ -117,8 +115,8 @@ class ConfigurationManager:
             return PipelineSettings(**init_args)
 
         try:
-            with open(RUNTIME_SETTINGS_FILE, encoding="utf-8") as f:
-                file_data = cast(dict[str, object], json.load(f))
+            with open(RUNTIME_SETTINGS_FILE, encoding="utf-8") as settings_file:
+                file_data = cast(dict[str, object], json.load(settings_file))
         except (OSError, json.JSONDecodeError) as error:
             logger.warning("Dynamic rules deserialization aborted: %s", error)
             return PipelineSettings(**init_args)
@@ -153,12 +151,12 @@ class ConfigurationManager:
                 self._active_settings.custom_api_keys[str(new_name)] = str(new_key)
 
                 # Merge into updates so it isn't overwritten
-                provs = updates.get("custom_key_providers")
-                if provs is None:
-                    provs = self._active_settings.custom_key_providers.copy()
-                if isinstance(provs, dict):
-                    provs[str(new_name)] = str(new_provider)
-                updates["custom_key_providers"] = provs
+                providers_dict = updates.get("custom_key_providers")
+                if providers_dict is None:
+                    providers_dict = self._active_settings.custom_key_providers.copy()
+                if isinstance(providers_dict, dict):
+                    providers_dict[str(new_name)] = str(new_provider)
+                updates["custom_key_providers"] = providers_dict
 
             for key, value in updates.items():
                 if key in ("api_key_input", "custom_key_name", "recognized_provider"):
@@ -166,7 +164,8 @@ class ConfigurationManager:
                 self._apply_field_update(key, value)
 
             keys_to_delete = [
-                key for key in self._active_settings.custom_api_keys
+                key
+                for key in self._active_settings.custom_api_keys
                 if key not in self._active_settings.custom_key_providers
             ]
             for key in keys_to_delete:
@@ -180,9 +179,13 @@ class ConfigurationManager:
             try:
                 with open(
                     RUNTIME_SETTINGS_FILE, "w", encoding="utf-8"
-                ) as f_out:
+                ) as settings_file_out:
                     json.dump(
-                        self._active_settings.model_dump(exclude={"api_key_input", "custom_api_keys"}), f_out, indent=2  # noqa: E501
+                        self._active_settings.model_dump(
+                            exclude={"api_key_input", "custom_api_keys"}
+                        ),
+                        settings_file_out,
+                        indent=2,
                     )
             except OSError as error:
                 raise ConfigError("Failed to update tracking cache") from error
@@ -195,9 +198,8 @@ class ConfigurationManager:
             self._active_settings.generator_system_prompt = self._baselines[
                 "generator_prompt"
             ]
-            self._active_settings.judge_system_prompt = self._baselines[
-                "judge_prompt"
-            ]
+            self._active_settings.judge_system_prompt = self._baselines["judge_prompt"]
+            self._active_settings.yaml_system_prompt = self._baselines["yaml_prompt"]
             self._active_settings.global_chosen_engine = "gemini"
             self._active_settings.custom_key_name = ""
             self._active_settings.recognized_provider = ""

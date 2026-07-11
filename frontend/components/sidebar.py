@@ -119,7 +119,6 @@ def _on_new_click() -> None:
     st.session_state.selected_template = currently_selected_template
 
 
-
 def _on_delete_click(task_id: str | None) -> None:
     if not task_id:
         return
@@ -238,7 +237,6 @@ def _on_rename_click(task_id: str | None) -> None:
     st.session_state.rename_input = ""
 
 
-
 def render_historical_sidebar(*, disabled: bool) -> None:
     """
     Fetches the history of completed tasks and displays
@@ -318,4 +316,3 @@ def render_historical_sidebar(*, disabled: bool) -> None:
                 on_click=_on_rename_click,
                 args=(currently_active_task_id,),
             )
-

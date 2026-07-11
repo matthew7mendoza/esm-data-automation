@@ -1,4 +1,5 @@
 """Streamlit layout rendering interface configurations and environment overrides."""
+
 from typing import Final, cast
 
 import requests
@@ -13,6 +14,7 @@ __all__: Final[list[str]] = ["render_settings_view"]
 SETTINGS_API_URL: Final[str] = f"{BACKEND_URL}/api/settings"
 RESET_API_URL: Final[str] = f"{BACKEND_URL}/api/settings/reset"
 
+
 def _fetch_active_settings() -> ConfigState | None:
     """Pulls existing state from backend over isolated REST call."""
     try:
@@ -25,6 +27,7 @@ def _fetch_active_settings() -> ConfigState | None:
         return None
 
     return cast(ConfigState, response.json())
+
 
 def _commit_runtime_update(
     payload: dict[str, str | float | dict[str, str]] | ConfigState, /
@@ -39,6 +42,7 @@ def _commit_runtime_update(
 
     return response.status_code == 200
 
+
 def _initialize_local_state() -> None:
     """Guards session state to ensure single network trip."""
     fetched = _fetch_active_settings()
@@ -48,6 +52,7 @@ def _initialize_local_state() -> None:
         )
         return
     st.session_state.local_config_state = fetched
+
 
 def _recognize_provider(api_key: str) -> str:
     """Detects provider from common API key prefixes."""
@@ -59,6 +64,7 @@ def _recognize_provider(api_key: str) -> str:
     if api_key.startswith("nvapi-"):
         return "nemotron"
     return ""
+
 
 def _on_custom_key_added() -> None:
     key = st.session_state.get("temp_api_key", "").strip()
@@ -75,6 +81,7 @@ def _on_custom_key_added() -> None:
         st.session_state.temp_api_key = ""
         st.session_state.temp_api_name = ""
         st.toast(f"Successfully ingested {name}!")
+
 
 def _render_form_fields(  # noqa: C901
     state: ConfigState,
@@ -158,7 +165,6 @@ def _render_form_fields(  # noqa: C901
                 st.toast(f"Removed custom engine {chosen_engine}")
                 st.rerun()
 
-
     temperature = st.slider(
         "LLM Generation Temperature",
         min_value=0.0,
@@ -182,15 +188,8 @@ def _render_form_fields(  # noqa: C901
         disabled=disabled,
     )
 
-    return (
-        "",
-        temperature,
-        generator_prompt,
-        judge_prompt,
-        str(chosen_engine),
-        "",
-        ""
-    )
+    return ("", temperature, generator_prompt, judge_prompt, str(chosen_engine), "", "")
+
 
 def _handle_save_action(
     configuration_state: ConfigState,
@@ -224,6 +223,7 @@ def _handle_save_action(
     st.session_state.settings_saved_notification_flag = True
     st.rerun()
 
+
 def _handle_reset_action() -> None:
     """Helper to process the reset settings action."""
     try:
@@ -232,7 +232,7 @@ def _handle_reset_action() -> None:
         st.error("Failed to execute state transition")
         return
 
-    response_status_code_is_successful = (backend_response.status_code == 200)
+    response_status_code_is_successful = backend_response.status_code == 200
     if not response_status_code_is_successful:
         st.error("Server rejected factory reset request.")
         return
@@ -240,6 +240,7 @@ def _handle_reset_action() -> None:
     del st.session_state.local_config_state
     st.session_state.settings_reset_notification_flag = True
     st.rerun()
+
 
 def _render_action_buttons(
     configuration_state: ConfigState,
@@ -260,8 +261,7 @@ def _render_action_buttons(
 
     if has_unsaved_changes:
         st.info(
-            " Reminder: Don't forget to click 'Save Settings' "
-            "to save your changes!"
+            " Reminder: Don't forget to click 'Save Settings' to save your changes!"
         )
 
     column_one, column_two = st.columns(2)
@@ -292,6 +292,7 @@ def _render_action_buttons(
     )
     if reset_settings_button_was_clicked:
         _handle_reset_action()
+
 
 def render_settings_view(*, disabled: bool) -> None:
     """Renders the UI elements"""
@@ -342,6 +343,7 @@ def render_settings_view(*, disabled: bool) -> None:
         recognized_provider=recognized_provider,
         disabled=disabled,
     )
+
 
 def _on_extract_clicked(name: str, desc: str) -> None:
     st.session_state.is_extracting = True
@@ -404,7 +406,7 @@ def _render_custom_templates_section(*, disabled: bool) -> None:  # noqa: C901
             updated_questions = []
             for index, question in enumerate(questions):
                 updated_question = st.text_area(
-                    f"Question {index+1}",
+                    f"Question {index + 1}",
                     value=question,
                     key=f"custom_q_{index}",
                     disabled=disabled,
@@ -415,11 +417,11 @@ def _render_custom_templates_section(*, disabled: bool) -> None:  # noqa: C901
             new_qs = st.text_area(
                 "Add new questions (one per line, optional)",
                 key="custom_q_new",
-                disabled=disabled
+                disabled=disabled,
             )
 
             if st.form_submit_button("Save Custom Template", disabled=disabled):
-                for line in new_qs.split('\n'):
+                for line in new_qs.split("\n"):
                     if line.strip():
                         updated_questions.append(line.strip())
 

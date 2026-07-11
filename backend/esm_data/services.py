@@ -56,9 +56,7 @@ async def _initialize_task_and_questions_in_session(
 ) -> list[str] | None:
     task = await session.get(Task, task_id)
     if not task:
-        logger.error(
-            f"Aborting worker: tracking ticket context {task_id} not found"
-        )
+        logger.error(f"Aborting worker: tracking ticket context {task_id} not found")
         return None
 
     task.status = "PROCESSING"
@@ -96,7 +94,7 @@ async def _run_extraction_thread(
         ) from generation_error
 
 
-async def _perform_document_extraction(
+async def _perform_document_extraction(  # noqa: C901
     target_questions: list[str], model_provider: str, staging_path: Path
 ) -> tuple[ExtractionReport | None, str, str | None]:
     error_detail: str | None = None
@@ -119,13 +117,47 @@ async def _perform_document_extraction(
 
         active_config = settings_engine.get_current()
         provider_instance = get_provider(name=model_provider)
-        generator = DocumentGenerator(
-            provider=provider_instance,
-            instructions=(
-                active_config.generator_system_prompt
-                if active_config.generator_system_prompt
-                else None
+
+        instruction_blocks: list[str] = []
+        if active_config.generator_system_prompt:
+            instruction_blocks.append(active_config.generator_system_prompt)
+
+        # Guard clause check for automated parsed data
+        yaml_files = [
+            staging_file
+            for staging_file in staging_path.iterdir()
+            if staging_file.is_file()
+            and staging_file.suffix.lower() in {".yaml", ".yml"}
+        ]
+        if yaml_files and active_config.yaml_system_prompt:
+            logger.info(
+                "Detected automated YAML payload. Appending strict YAML instructions."
             )
+            instruction_blocks.append(f"\n\n{active_config.yaml_system_prompt}")
+
+        # Guard clause check for scientist-provided custom overrides
+        custom_prompt_file = staging_path / "custom_instructions.txt"
+        if custom_prompt_file.exists():
+            logger.info(
+                "Detected custom_instructions.txt override. Appending to system prompt."
+            )
+            try:
+                custom_prompt_text = custom_prompt_file.read_text(
+                    encoding="utf-8"
+                ).strip()
+                instruction_blocks.append(
+                    f"\n\nUSER OVERRIDE INSTRUCTIONS:\n{custom_prompt_text}"
+                )
+            except OSError as read_error:
+                logger.warning(f"Could not read custom_instructions.txt: {read_error}")
+
+        final_instructions = "".join(instruction_blocks) if instruction_blocks else None
+
+        logger.info(
+            f"Initializing AI DocumentGenerator using provider: {model_provider}"
+        )
+        generator = DocumentGenerator(
+            provider=provider_instance, instructions=final_instructions
         )
         report = await _run_extraction_thread(
             generator, target_questions, final_unified_context
@@ -162,8 +194,7 @@ async def _write_final_task_status(
     task = await session.get(Task, task_id)
     if not task:
         logger.error(
-            "Failed to finalize processing job: "
-            f"tracking ticket {task_id} missing"
+            f"Failed to finalize processing job: tracking ticket {task_id} missing"
         )
         return
 
@@ -250,9 +281,7 @@ async def _register_new_task(
     session: AsyncSession, task_id: TaskId, custom_name: str | None, staging_path: Path
 ) -> None:
     try:
-        new_task = Task(
-            task_id=task_id, status="PENDING", custom_name=custom_name
-        )
+        new_task = Task(task_id=task_id, status="PENDING", custom_name=custom_name)
         session.add(new_task)
         await session.commit()
     except SQLAlchemyError as db_error:
@@ -271,7 +300,28 @@ async def stage_incoming_files_and_register_task(
     files: list[UploadFile],
     custom_name: str | None,
     staging_path: Path,
+    is_update_boolean: bool = False,
 ) -> None:
+    if is_update_boolean:
+        existing_versions_count: int = (
+            len([item for item in staging_path.iterdir() if item.is_dir()])
+            if staging_path.exists()
+            else 0
+        )
+        next_version_integer: int = existing_versions_count + 1
+        version_directory_path: Path = staging_path / f"v{next_version_integer}"
+        version_directory_path.mkdir(parents=True, exist_ok=True)
+
+        for uploaded_file in files:
+            await _stage_single_file(uploaded_file, version_directory_path)
+
+        task_record = await session.get(Task, task_id)
+        if task_record:
+            task_record.status = "PENDING_REVIEW"
+            session.add(task_record)
+            await session.commit()
+        return
+
     for uploaded_file in files:
         await _stage_single_file(uploaded_file, staging_path)
     await _register_new_task(session, task_id, custom_name, staging_path)

@@ -34,9 +34,7 @@ def render_trust_audit_ledger(*, source_context: str | None) -> None:
     if not source_context:
         return
 
-    contributing_files: list[str] = extract_source_assets(
-        source_context=source_context
-    )
+    contributing_files: list[str] = extract_source_assets(source_context=source_context)
     if not contributing_files:
         st.warning("No explicit source context assets detected!")
         return

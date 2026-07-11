@@ -37,7 +37,10 @@ include = ["backend*", "frontend*", "shared*"]
 dev = [
     "mypy",
     "pytest",
-    "ruff"
+    "ruff",
+    "mkdocs",
+    "mkdocs-material",
+    "pytest-cov"
 ]
 
 [tool.mypy]
@@ -52,10 +55,11 @@ warn_unused_configs = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q"
+addopts = "-ra -q --cov=cli/src/esm_tracker --cov-report=term-missing --cov-fail-under=90"
 testpaths = [
     "backend",
-    "frontend"
+    "frontend",
+    "cli/tests"
 ]
 
 [tool.ruff]

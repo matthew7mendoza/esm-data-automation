@@ -180,9 +180,7 @@ def send_audit_request(
 
     st.success("Audit complete!")
 
-    audit_metadata = cast(
-        dict[str, object], audit_metrics_payload.get("metadata", {})
-    )
+    audit_metadata = cast(dict[str, object], audit_metrics_payload.get("metadata", {}))
     gwet_agreement_score = cast(float, audit_metadata.get("global_gwets_ac1", 0.0))
 
     st.metric("Agreement score (Gwet's AC1)", gwet_agreement_score)

@@ -10,10 +10,13 @@ from frontend.ui_constants import BACKEND_URL, TEMPLATE_SORT_ORDER
 from shared.models import TaskId
 
 __all__: Final[list[str]] = [
+    "approve_pending_update",
     "create_custom_template",
     "extract_template_questions",
     "fetch_all_historical_tasks",
+    "fetch_pending_context",
     "fetch_server_templates",
+    "generate_api_token",
     "get_task_profile",
     "update_task_report",
 ]
@@ -58,9 +61,7 @@ def fetch_server_templates() -> list[str]:
 def get_task_profile(*, task_identifier: TaskId) -> TaskProfileDict | None:
     """Tracks real-time database modifications for a running tracking ticket."""
     try:
-        response = requests.get(
-            f"{BACKEND_URL}/api/tasks/{task_identifier}", timeout=5
-        )
+        response = requests.get(f"{BACKEND_URL}/api/tasks/{task_identifier}", timeout=5)
     except requests.exceptions.ConnectionError:
         return None
     except requests.exceptions.Timeout:
@@ -122,9 +123,7 @@ def update_task_report(
     return response.status_code == 200
 
 
-def extract_template_questions(
-    file_bytes: bytes, file_name: str
-) -> list[str] | None:
+def extract_template_questions(file_bytes: bytes, file_name: str) -> list[str] | None:
     """Sends a template file to the backend to extract questions."""
     upload_files_payload = {"file": (file_name, file_bytes)}
 
@@ -182,3 +181,60 @@ def create_custom_template(
         return False
 
     return True
+
+
+def generate_api_token() -> str | None:
+    """Requests a new authentication token from the backend for CLI usage."""
+    try:
+        response = requests.post(f"{BACKEND_URL}/api/auth/token", timeout=5)
+    except requests.exceptions.ConnectionError as connection_failure:
+        logger.error(f"Network error generating token: {connection_failure}")
+        return None
+    except requests.exceptions.Timeout as timeout_failure:
+        logger.error(f"Timeout generating token: {timeout_failure}")
+        return None
+    except requests.exceptions.RequestException as generic_network_failure:
+        logger.error(f"General error generating token: {generic_network_failure}")
+        return None
+
+    if response.status_code != 201:
+        logger.error(f"Failed to generate token: {response.text}")
+        return None
+
+    payload: dict[str, str] = response.json()
+    return payload.get("token")
+
+
+def approve_pending_update(task_identifier: str) -> bool:
+    """Approves a version update and triggers the AI background generation."""
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/tasks/{task_identifier}/approve", timeout=10
+        )
+    except requests.exceptions.ConnectionError:
+        return False
+    except requests.exceptions.Timeout:
+        return False
+    except requests.exceptions.RequestException:
+        return False
+
+    return response.status_code == 202
+
+
+def fetch_pending_context(task_identifier: str) -> dict[str, str] | None:
+    """Fetches the previous and incoming metadata strings for side-by-side review."""
+    try:
+        response = requests.get(
+            f"{BACKEND_URL}/api/tasks/{task_identifier}/pending-context", timeout=10
+        )
+    except requests.exceptions.ConnectionError:
+        return None
+    except requests.exceptions.Timeout:
+        return None
+    except requests.exceptions.RequestException:
+        return None
+
+    if response.status_code != 200:
+        return None
+
+    return cast(dict[str, str], response.json())

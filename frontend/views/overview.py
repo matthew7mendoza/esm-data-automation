@@ -43,20 +43,20 @@ def render_overview_view(*, disabled: bool) -> None:
                 height: 220px; transition: transform 0.2s ease;">
                 <h4 style="margin-top: 0; color: #1e3a8a; display: flex;
                     align-items: center; gap: 8px;">
-                    Start a New Experiment (Metadata Tracker)
+                    Initialize Automated Data Tracking (CLI)
                 </h4>
                 <p style="color: #475569; font-size: 0.9rem; line-height: 1.5;
                     margin-bottom: 0;">
-                    Set up automated, zero-touch metadata tracking for a new
-                    or ongoing model run on PPAN. Never write a Data
-                    Management Plan manually again.
+                    Generate authentication tokens and CLI commands to
+                    automatically extract metadata directly within your
+                    compute environment.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
         start_tracking_button_clicked = st.button(
-            "Start Tracking",
+            "Initialize Tracking",
             key="button_start_tracking",
             type="primary",
             disabled=disabled,
@@ -74,19 +74,19 @@ def render_overview_view(*, disabled: bool) -> None:
                 height: 220px; transition: transform 0.2s ease;">
                 <h4 style="margin-top: 0; color: #1e3a8a; display: flex;
                     align-items: center; gap: 8px;">
-                    Retroactive Form Automation (The Typer)
+                    Process Existing Manual Documents
                 </h4>
                 <p style="color: #475569; font-size: 0.9rem; line-height: 1.5;
                     margin-bottom: 0;">
-                    Already have your data and PDFs? Upload them here to have
-                    AI instantly generate your compliance forms.
+                    Upload existing datasets, metadata receipts, or
+                    publications to synthesize standard compliance forms.
                 </p>
             </div>
             """,
             unsafe_allow_html=True,
         )
         automate_forms_button_clicked = st.button(
-            "Automate Existing Forms",
+            "Upload Documents",
             key="button_automate_forms",
             type="primary",
             disabled=disabled,

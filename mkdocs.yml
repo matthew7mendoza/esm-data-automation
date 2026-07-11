@@ -1,0 +1,15 @@
+site_name: ESM Tracker Documentation
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+
+nav:
+  - Quickstart: index.md
+  - How It Works Locally: local-execution.md
+  - Data Privacy: privacy.md
+  - The Time Machine: time-machine.md
+  - Integration Workflows: workflows.md

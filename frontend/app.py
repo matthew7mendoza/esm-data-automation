@@ -19,6 +19,7 @@ from frontend.ui_constants import (
 from frontend.views.generator import render_generator_tab_view
 from frontend.views.judge import render_judge_tab_view
 from frontend.views.overview import render_overview_view
+from frontend.views.review import render_review_view
 from frontend.views.settings import _fetch_active_settings, render_settings_view
 from frontend.views.tracker import render_tracker_view
 
@@ -28,13 +29,14 @@ logger: Final[logging.Logger] = logging.getLogger(__name__)
 OVERVIEW_PAGE: Final[str] = "OVERVIEW"
 SETTINGS_PAGE: Final[str] = "SETTINGS"
 TRACKER_PAGE: Final[str] = "TRACKER"
+REVIEW_PAGE: Final[str] = "REVIEW"
 
 
 def inject_global_theme() -> None:
     """Reads static layout styles and binds them directly into the runtime view."""
     css_path = os.path.join(os.path.dirname(__file__), "assets", "styles.css")
-    with open(css_path, encoding="utf-8") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+    with open(css_path, encoding="utf-8") as file_handle:
+        st.markdown(f"<style>{file_handle.read()}</style>", unsafe_allow_html=True)
 
 
 def _initialize_session_state() -> None:
@@ -202,7 +204,20 @@ def main() -> None:  # noqa: C901
         if fetched:
             st.session_state.local_config_state = fetched
 
-    selected_page: str = _render_sidebar(is_running, available_templates)
+    task_id_query = st.query_params.get("task_id")
+    if task_id_query:
+        st.session_state.current_task_id = task_id_query
+        st.session_state.selected_template = REVIEW_PAGE
+        st.query_params.clear()
+
+    if st.session_state.get("selected_template") == REVIEW_PAGE:
+        selected_page = REVIEW_PAGE
+    else:
+        selected_page = _render_sidebar(is_running, available_templates)
+
+    if selected_page == REVIEW_PAGE:
+        render_review_view(disabled=is_running)
+        return
 
     if selected_page == SETTINGS_PAGE:
         render_settings_view(disabled=is_running)

@@ -81,8 +81,7 @@ class TestFastAPIEndpoints:
                     task_id=task_id,
                     status="COMPLETED",
                     report_json=(
-                        '{"extracted_answers": {"Q1": "A1"}, '
-                        '"missing_information": []}'
+                        '{"extracted_answers": {"Q1": "A1"}, "missing_information": []}'
                     ),
                 )
                 session.add(task)

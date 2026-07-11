@@ -3,6 +3,7 @@ This file defines the standard data structures, rules, and custom errors
 """
 
 from typing import Literal, NewType, TypedDict
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -106,8 +107,7 @@ class RubricItemConfig(BaseModel):
     id: str = Field(
         ...,
         description=(
-            "The unique identifier for the question "
-            "(for example, '1.1', or '2.A')."
+            "The unique identifier for the question (for example, '1.1', or '2.A')."
         ),
     )
     question: str = Field(
@@ -148,8 +148,7 @@ class NoveltyEntrySchema(BaseModel):
         ge=0,
         le=3,
         description=(
-            "The score for how well it solves an unanswered problem, "
-            "from 0 to 3"
+            "The score for how well it solves an unanswered problem, from 0 to 3"
         ),
     )
     non_obviousness: int = Field(
@@ -177,8 +176,7 @@ class ComplianceScoringSchema(BaseModel):
     justification: str = Field(
         ...,
         description=(
-            "The explanation written by the AI Judge justifying its "
-            "final grade."
+            "The explanation written by the AI Judge justifying its final grade."
         ),
     )
     answer: Literal["Yes", "No"] = Field(
@@ -248,7 +246,8 @@ class TemplateQuestionsExtraction(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     questions: list[str] = Field(
-        ..., description="The ordered list of questions or form fields extracted from the document."  # noqa: E501
+        ...,
+        description="The ordered list of questions or form fields extracted from the document.",  # noqa: E501
     )
 
 
@@ -329,3 +328,36 @@ class TaskRenameRequest(BaseModel):
 
     custom_name: str = Field(..., description="The new custom name for the task.")
 
+
+class FileMetadataSchema(TypedDict):
+    """Strongly typed structure for extracted dataset metadata."""
+
+    file_name: str
+    file_size_bytes: int
+    status: str
+    variables: list[str]
+    dimensions: dict[str, int]
+    global_attributes: dict[str, object]
+
+
+class ProjectSummaryPayloadSchema(BaseModel):
+    """
+    Validates the tracking payload sent by the CLI, incorporating the Time Machine UUID.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    project_unique_identifier: UUID = Field(
+        ..., description="The unique UUID for this project generated on Day Zero."
+    )
+    is_force_update_boolean: bool = Field(
+        ...,
+        description="Flag indicating if this update should bypass or queue for review.",
+    )
+    experiment_name: str = Field(..., description="Name of the experiment.")
+    model_archetype: str = Field(
+        ..., description="Model archetype (e.g. 'GFDL SPEAR')."
+    )
+    datasets: list[FileMetadataSchema] = Field(
+        ..., description="List of scanned metadata files."
+    )

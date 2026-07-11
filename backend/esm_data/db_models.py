@@ -2,9 +2,11 @@
 Tables that we want to save to db
 """
 
+from datetime import UTC, datetime
+
 from sqlmodel import Field, Relationship, SQLModel
 
-__all__ = ["FormTemplate", "Task", "TemplateQuestion"]
+__all__ = ["ApiToken", "FormTemplate", "Task", "TemplateQuestion"]
 
 
 class FormTemplate(SQLModel, table=True):
@@ -43,3 +45,13 @@ class Task(SQLModel, table=True):
     report_json: str | None = Field(default=None)
     source_context: str | None = Field(default=None)
     detail: str | None = Field(default=None)
+
+
+class ApiToken(SQLModel, table=True):
+    """
+    Secure access token for CLI authentication.
+    """
+
+    token_string: str = Field(primary_key=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    is_active: bool = Field(default=True)
