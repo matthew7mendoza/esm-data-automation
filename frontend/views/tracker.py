@@ -16,14 +16,14 @@ def _build_cli_instructions(
     api_token: str,
 ) -> tuple[str, str]:
     if package_manager_selection == "conda":
-        installation_command = "conda install -c matthew7mendoza esm-tracker"
+        installation_command = "conda install -c conda-forge esm-tracker"
     else:
-        installation_command = "pip install esm-tracker"
+        installation_command = "python -m pip install --user esm-tracker"
 
     model_string: str = ", ".join(selected_model_archetypes)
     execution_command = (
-        f'esm-tracker init --experiment="{experiment_name}" '
-        f'--model="{model_string}" --token="{api_token}"'
+        f'python -m esm_tracker init --experiment="{experiment_name}" '
+        f'--model="{model_string}" --token="{api_token}" --publish'
     )
     return installation_command, execution_command
 
@@ -50,16 +50,14 @@ def _handle_generation_button_click(
 
     if not api_token:
         st.error(
-            "Failed to generate an API token. "
-            "Please ensure the backend is running."
+            "Failed to generate an API token. Please ensure the backend is running."
         )
         return
 
     st.success("Setup instructions and secure token generated successfully.")
     st.markdown("### Next Steps (Run in Terminal)")
     st.markdown(
-        "Open your terminal and run the following commands "
-        "in your work directory:"
+        "Open your terminal and run the following commands in your work directory:"
     )
 
     installation_command, execution_command = _build_cli_instructions(

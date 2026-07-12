@@ -479,8 +479,11 @@ def _initialize_cache_backend(
     target_directory_path: Path, discovered_files_list: list[Path]
 ) -> CacheBackendProtocol:
     """Determines and returns the appropriate cache backend (JSON or SQLite)."""
-    json_cache_path: Path = target_directory_path / ".esm-cache.json"
-    sqlite_cache_path: Path = target_directory_path / ".esm-cache.db"
+    hidden_directory_path: Path = target_directory_path / ".esm"
+    hidden_directory_path.mkdir(parents=True, exist_ok=True)
+
+    json_cache_path: Path = hidden_directory_path / ".esm-cache.json"
+    sqlite_cache_path: Path = hidden_directory_path / ".esm-cache.db"
 
     database_already_exists_boolean: bool = sqlite_cache_path.exists()
 

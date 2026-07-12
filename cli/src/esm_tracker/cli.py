@@ -16,11 +16,7 @@ from typing import Final
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from esm_tracker.publisher import (
-    publish_to_api,
-    update_api_settings,
-    write_yaml_locally,
-)
+from esm_tracker.publisher import publish_to_api, write_yaml_locally
 from esm_tracker.scanner import FileMetadata, scan_directory
 
 logger: Final[logging.Logger] = logging.getLogger("esm_tracker")
@@ -33,13 +29,17 @@ def save_authentication_token(api_token_string: str) -> None:
         return
 
     config_file_path: Path = Path.home() / ".esm-tracker-config"
-    config_data: dict[str, str] = {"api_token": api_token_string}
+    config_data_dictionary: dict[str, str] = {"api_token": api_token_string}
 
-    with open(config_file_path, "w", encoding="utf-8") as file_handle:
-        json.dump(config_data, file_handle)
-
-    config_file_path.chmod(0o600)
-    logger.info(f"Successfully saved secure authentication token to {config_file_path}")
+    try:
+        with open(config_file_path, "w", encoding="utf-8") as file_handle:
+            json.dump(config_data_dictionary, file_handle)
+        config_file_path.chmod(0o600)
+        logger.info(
+            f"Successfully saved secure authentication token to {config_file_path}"
+        )
+    except OSError as write_error:
+        logger.error(f"Failed to write authentication token: {write_error}")
 
 
 def configure_logging() -> None:
@@ -63,7 +63,9 @@ def submit_job_to_slurm_scheduler(
     ]
     command_string: str = " ".join(safe_arguments_list)
 
-    script_file_path: Path = target_directory_path / ".esm_slurm_submission.sh"
+    hidden_directory_path: Path = target_directory_path / ".esm"
+    hidden_directory_path.mkdir(parents=True, exist_ok=True)
+    script_file_path: Path = hidden_directory_path / ".esm_slurm_submission.sh"
 
     script_content_string: str = (
         "#!/bin/bash\n"
@@ -76,7 +78,7 @@ def submit_job_to_slurm_scheduler(
     )
 
     try:
-        script_file_path.write_text(script_content_string)
+        script_file_path.write_text(script_content_string, encoding="utf-8")
         logger.info(
             f"Successfully wrote SLURM submission script to {script_file_path}."
         )
@@ -98,23 +100,21 @@ def submit_job_to_slurm_scheduler(
 def run_tracking_pipeline(
     experiment_name_string: str,
     model_archetype_string: str,
-    publish_boolean_flag: bool,
     target_directory_path: Path,
-    api_endpoint_string: str,
-    dashboard_endpoint_string: str,
     project_unique_identifier_string: str,
     is_force_update_boolean: bool,
+    publish_boolean_flag: bool,
+    api_endpoint_string: str,
+    dashboard_endpoint_string: str,
     include_pattern_string: str = "*",
     exclude_pattern_string: str = "",
-    prompt_file_path: Path | None = None,
-    model_provider_string: str = "gemini",
-    target_document_string: str = "DMP",
 ) -> None:
     """
     Coordinates the scanning and publishing workflow using strictly flat logic.
     """
     logger.info(
-        f"Init experiment: {experiment_name_string} | Model: {model_archetype_string}"
+        f"Tracking experiment: {experiment_name_string} | "
+        f"Model: {model_archetype_string}"
     )
 
     extracted_datasets_list: list[FileMetadata] = scan_directory(
@@ -124,7 +124,11 @@ def run_tracking_pipeline(
     )
 
     if not extracted_datasets_list:
-        logger.warning("No data found. Writing empty project summary.")
+        logger.error(
+            f"No NetCDF (.nc) or Zarr data found in {target_directory_path}. "
+            "Are you in the right directory?"
+        )
+        sys.exit(1)
 
     project_summary_payload_dictionary: dict[str, object] = {
         "project_unique_identifier": project_unique_identifier_string,
@@ -143,7 +147,7 @@ def run_tracking_pipeline(
             payload_dictionary=project_summary_payload_dictionary,
         )
         logger.info(
-            f"Scan finished successfully. File generated at {output_yaml_file_path}"
+            f"Success! 📄 project_summary.yaml generated at {output_yaml_file_path}"
         )
         return
 
@@ -154,9 +158,6 @@ def run_tracking_pipeline(
         dashboard_endpoint_string=dashboard_endpoint_string,
         payload_dictionary=project_summary_payload_dictionary,
         output_file_path=output_yaml_file_path,
-        prompt_file_path=prompt_file_path,
-        model_provider_string=model_provider_string,
-        target_document_string=target_document_string,
     )
 
     if publish_success_boolean:
@@ -195,50 +196,68 @@ class DataFileSystemEventHandler(FileSystemEventHandler):
         logger.info(
             f"New data successfully detected by background process: {file_path_string}"
         )
-        # Ignore type checking here because we pass mixed types as kwargs
-
         run_tracking_pipeline(**self.pipeline_keyword_arguments_dictionary)  # type: ignore
 
 
-def get_or_create_project_identifier(target_directory_path: Path) -> str:
-    """Retrieves the existing UUID or generates a new one securely."""
-    identifier_file_path: Path = target_directory_path / ".esm_tracker_id.json"
+def load_or_initialize_project_state(
+    target_directory_path: Path,
+    experiment_name_string: str | None,
+    model_archetype_string: str | None,
+) -> tuple[str, str, str]:
+    """Retrieves existing project state or initializes a new one."""
+    hidden_directory_path: Path = target_directory_path / ".esm"
+    hidden_directory_path.mkdir(parents=True, exist_ok=True)
+
+    identifier_file_path: Path = hidden_directory_path / ".esm_tracker_id.json"
+
     if identifier_file_path.exists():
         try:
             with open(identifier_file_path, encoding="utf-8") as file_handle:
                 data_dictionary: dict[str, str] = json.load(file_handle)
                 project_id_string: str = data_dictionary["project_unique_identifier"]
-                return project_id_string
+                saved_experiment_string: str = data_dictionary["experiment_name"]
+                saved_model_string: str = data_dictionary["model_archetype"]
+                return project_id_string, saved_experiment_string, saved_model_string
         except (OSError, json.JSONDecodeError, KeyError) as read_error:
             logger.error(
-                f"Failed to read existing project ID: {read_error}. Generating new one."
+                f"Failed to read existing project state: {read_error}. Re-initializing."
             )
-            pass
+
+    if experiment_name_string is None or model_archetype_string is None:
+        logger.error(
+            "Project state not found. You must run 'init' with "
+            "--experiment and --model first."
+        )
+        sys.exit(1)
 
     new_uuid_string: str = str(uuid.uuid4())
+    state_dictionary: dict[str, str] = {
+        "project_unique_identifier": new_uuid_string,
+        "experiment_name": experiment_name_string,
+        "model_archetype": model_archetype_string,
+    }
+
     try:
         with open(identifier_file_path, "w", encoding="utf-8") as file_handle:
-            json.dump({"project_unique_identifier": new_uuid_string}, file_handle)
-        logger.info(f"Generated new project unique identifier: {new_uuid_string}")
+            json.dump(state_dictionary, file_handle)
+        logger.info(f"Initialized new project state with UUID: {new_uuid_string}")
     except OSError as write_error:
-        logger.error(f"Could not save project identifier: {write_error}")
+        logger.error(f"Could not save project state: {write_error}")
+        sys.exit(1)
 
-    return new_uuid_string
+    return new_uuid_string, experiment_name_string, model_archetype_string
 
 
 def execute_initialization_workflow(
-    experiment_name_string: str,
-    model_archetype_string: str,
-    publish_boolean_flag: bool,
+    experiment_name_string: str | None,
+    model_archetype_string: str | None,
     target_directory_path: Path,
     watch_boolean_flag: bool,
     slurm_boolean_flag: bool,
+    publish_boolean_flag: bool,
     include_pattern_string: str,
     exclude_pattern_string: str,
     is_force_update_boolean: bool = False,
-    prompt_file_path: Path | None = None,
-    model_provider_string: str = "gemini",
-    target_document_string: str = "DMP",
 ) -> None:
     """Sets up the execution environment (single-run, watch mode, or SLURM)."""
     if slurm_boolean_flag:
@@ -256,24 +275,23 @@ def execute_initialization_workflow(
         "ESM_TRACKER_DASHBOARD_URL", "http://localhost:8501"
     )
 
-    project_unique_identifier_string: str = get_or_create_project_identifier(
-        target_directory_path=target_directory_path
+    project_id, active_experiment, active_model = load_or_initialize_project_state(
+        target_directory_path=target_directory_path,
+        experiment_name_string=experiment_name_string,
+        model_archetype_string=model_archetype_string,
     )
 
     pipeline_keyword_arguments_dictionary: dict[str, object] = {
-        "experiment_name_string": experiment_name_string,
-        "model_archetype_string": model_archetype_string,
-        "publish_boolean_flag": publish_boolean_flag,
+        "experiment_name_string": active_experiment,
+        "model_archetype_string": active_model,
         "target_directory_path": target_directory_path,
+        "project_unique_identifier_string": project_id,
+        "is_force_update_boolean": is_force_update_boolean,
+        "publish_boolean_flag": publish_boolean_flag,
         "api_endpoint_string": api_endpoint_string,
         "dashboard_endpoint_string": dashboard_endpoint_string,
-        "project_unique_identifier_string": project_unique_identifier_string,
-        "is_force_update_boolean": is_force_update_boolean,
         "include_pattern_string": include_pattern_string,
         "exclude_pattern_string": exclude_pattern_string,
-        "prompt_file_path": prompt_file_path,
-        "model_provider_string": model_provider_string,
-        "target_document_string": target_document_string,
     }
 
     run_tracking_pipeline(**pipeline_keyword_arguments_dictionary)  # type: ignore
@@ -309,10 +327,7 @@ def execute_initialization_workflow(
     logger.info("Background observer shutdown complete successfully.")
 
 
-def main() -> None:  # noqa: C901
-    """Entry point execution function for the esm-tracker command line interface."""
-    configure_logging()
-
+def setup_argument_parser() -> argparse.ArgumentParser:
     command_line_argument_parser = argparse.ArgumentParser(
         description="ESM Data Automation Tracker - Scans NetCDF and Zarr metadata."
     )
@@ -324,20 +339,19 @@ def main() -> None:  # noqa: C901
     initialization_parser = sub_parsers.add_parser(
         "init", help="Initialize a new experiment tracking sequence."
     )
+    initialization_parser.add_argument(
+        "--experiment", required=True, type=str, help="Name of the experiment to track."
+    )
+    initialization_parser.add_argument(
+        "--model", required=True, type=str, help="Model archetype (e.g. 'GFDL SPEAR')."
+    )
+    initialization_parser.add_argument(
+        "--token",
+        type=str,
+        help="Secure API token generated from the Streamlit frontend.",
+    )
 
     def add_common_tracking_args(parser_obj: argparse.ArgumentParser) -> None:
-        parser_obj.add_argument(
-            "--experiment",
-            required=True,
-            type=str,
-            help="Name of the experiment to track.",
-        )
-        parser_obj.add_argument(
-            "--model",
-            required=True,
-            type=str,
-            help="Model archetype (e.g. 'GFDL SPEAR').",
-        )
         parser_obj.add_argument(
             "--publish",
             action="store_true",
@@ -371,28 +385,6 @@ def main() -> None:  # noqa: C901
             default="",
             help="Glob pattern to exclude files (e.g. '*restart*').",
         )
-        parser_obj.add_argument(
-            "--prompt-file",
-            type=str,
-            help="Path to a text file containing custom LLM instructions.",
-        )
-        parser_obj.add_argument(
-            "--provider",
-            type=str,
-            default="gemini",
-            help="The LLM provider or custom key name to use (default: gemini).",
-        )
-        parser_obj.add_argument(
-            "--template",
-            type=str,
-            default="DMP",
-            help="Target document template to generate (e.g., DMP). Defaults to DMP.",
-        )
-        parser_obj.add_argument(
-            "--token",
-            type=str,
-            help="Secure API token generated from the Streamlit frontend.",
-        )
 
     add_common_tracking_args(initialization_parser)
 
@@ -406,74 +398,51 @@ def main() -> None:  # noqa: C901
         help="Force an update and queue for review.",
     )
 
-    configuration_parser = sub_parsers.add_parser(
-        "config", help="Configure custom settings like API keys for the backend."
-    )
-    configuration_parser.add_argument(
-        "--api-key", required=True, type=str, help="Your personal LLM API Key."
-    )
-    configuration_parser.add_argument(
-        "--provider", required=True, type=str, help="Provider type (e.g. 'openai')."
-    )
-    configuration_parser.add_argument(
-        "--name", required=True, type=str, help="Unique name for this API key mapping."
-    )
+    return command_line_argument_parser
 
-    parsed_arguments_namespace = command_line_argument_parser.parse_args()
 
-    api_endpoint_string: str = os.environ.get(
-        "ESM_TRACKER_API_URL", "http://localhost:8000/api/generate"
-    )
-
-    if parsed_arguments_namespace.command == "config":
-        update_success_boolean: bool = update_api_settings(
-            api_endpoint_string=api_endpoint_string,
-            api_key_string=parsed_arguments_namespace.api_key,
-            provider_type_string=parsed_arguments_namespace.provider,
-            key_name_string=parsed_arguments_namespace.name,
-        )
-        if not update_success_boolean:
-            logger.error("API Key configuration failed.")
-            sys.exit(1)
-
-        logger.info("API Key configuration complete successfully. Ready to init.")
-        return
+def process_command_execution(parsed_arguments_namespace: argparse.Namespace) -> None:
 
     if parsed_arguments_namespace.command in ["init", "run"]:
         target_directory_path: Path = Path(
             parsed_arguments_namespace.directory
         ).resolve()
-        prompt_file_path: Path | None = None
 
-        if parsed_arguments_namespace.prompt_file:
-            prompt_file_path = Path(parsed_arguments_namespace.prompt_file).resolve()
-
-        if prompt_file_path is not None and not prompt_file_path.exists():
-            logger.error(f"Custom prompt file not found: {prompt_file_path}")
-            sys.exit(1)
-
-        if parsed_arguments_namespace.token:
+        if (
+            parsed_arguments_namespace.command == "init"
+            and parsed_arguments_namespace.token
+        ):
             save_authentication_token(parsed_arguments_namespace.token)
 
         is_force_update: bool = False
+        experiment_name_string: str | None = None
+        model_archetype_string: str | None = None
+
         if parsed_arguments_namespace.command == "run":
             is_force_update = parsed_arguments_namespace.force_update
+        elif parsed_arguments_namespace.command == "init":
+            experiment_name_string = parsed_arguments_namespace.experiment
+            model_archetype_string = parsed_arguments_namespace.model
 
         execute_initialization_workflow(
-            experiment_name_string=parsed_arguments_namespace.experiment,
-            model_archetype_string=parsed_arguments_namespace.model,
-            publish_boolean_flag=parsed_arguments_namespace.publish,
+            experiment_name_string=experiment_name_string,
+            model_archetype_string=model_archetype_string,
             target_directory_path=target_directory_path,
             watch_boolean_flag=parsed_arguments_namespace.watch,
             slurm_boolean_flag=parsed_arguments_namespace.slurm,
+            publish_boolean_flag=parsed_arguments_namespace.publish,
             include_pattern_string=parsed_arguments_namespace.include,
             exclude_pattern_string=parsed_arguments_namespace.exclude,
             is_force_update_boolean=is_force_update,
-            prompt_file_path=prompt_file_path,
-            model_provider_string=parsed_arguments_namespace.provider,
-            target_document_string=parsed_arguments_namespace.template,
         )
-        return
+
+
+def main() -> None:
+    """Entry point execution function for the esm-tracker command line interface."""
+    configure_logging()
+    command_line_argument_parser = setup_argument_parser()
+    parsed_arguments_namespace = command_line_argument_parser.parse_args()
+    process_command_execution(parsed_arguments_namespace)
 
 
 if __name__ == "__main__":

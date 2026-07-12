@@ -551,14 +551,10 @@ async def get_pending_context(
     try:
         new_context = _build_pending_context_string(latest_dir)
     except OSError as operating_system_error:
-        logger.error(
-            f"Failed to extract pending context: {operating_system_error}"
-        )
+        logger.error(f"Failed to extract pending context: {operating_system_error}")
         new_context = f"Error extracting files: {operating_system_error}"
     except ValueError as value_error:
-        logger.error(
-            f"Failed to extract pending context: {value_error}"
-        )
+        logger.error(f"Failed to extract pending context: {value_error}")
         new_context = f"Error extracting files: {value_error}"
 
     return {"original": task.source_context or "", "pending": new_context}

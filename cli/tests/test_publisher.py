@@ -35,9 +35,7 @@ def test_write_yaml_locally_success(tmp_path: Path) -> None:
 
 
 @patch("esm_tracker.publisher.requests.post")
-def test_publish_to_api_success(
-    mock_post_function: MagicMock, tmp_path: Path
-) -> None:
+def test_publish_to_api_success(mock_post_function: MagicMock, tmp_path: Path) -> None:
     """Validates successful payload transmission to the backend."""
     mock_response = MagicMock()
     mock_response.status_code = 202
@@ -112,24 +110,29 @@ def test_update_api_settings_success(mock_patch_function: MagicMock) -> None:
     assert success_boolean is True
     mock_patch_function.assert_called_once()
 
+
 def test_write_yaml_locally_permission_error(tmp_path: Path) -> None:
     target_file_path: Path = tmp_path / "project_summary.yaml"
     with patch("esm_tracker.publisher.open", side_effect=PermissionError("Denied")):
         assert write_yaml_locally(target_file_path, {"test": "val"}) is False
+
 
 def test_write_yaml_locally_os_error(tmp_path: Path) -> None:
     target_file_path: Path = tmp_path / "project_summary.yaml"
     with patch("esm_tracker.publisher.open", side_effect=OSError("OS Error")):
         assert write_yaml_locally(target_file_path, {"test": "val"}) is False
 
+
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_missing_config(_mock_post: MagicMock, tmp_path: Path) -> None:
     output_yaml_path: Path = tmp_path / "project_summary.yaml"
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_malformed_config(_mock_post: MagicMock, tmp_path: Path) -> None:
@@ -138,9 +141,11 @@ def test_publish_to_api_malformed_config(_mock_post: MagicMock, tmp_path: Path) 
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
         config_file_path.write_text("invalid json {")
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_os_error_on_config_read(
@@ -154,9 +159,11 @@ def test_publish_to_api_os_error_on_config_read(
         patch("esm_tracker.publisher.Path.home", return_value=tmp_path),
         patch("esm_tracker.publisher.open", side_effect=OSError("Read Err")),
     ):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-            ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_no_token(_mock_post: MagicMock, tmp_path: Path) -> None:
@@ -165,9 +172,11 @@ def test_publish_to_api_no_token(_mock_post: MagicMock, tmp_path: Path) -> None:
     config_file_path.write_text(json.dumps({"wrong_key": "abc"}))
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_timeout(mock_post: MagicMock, tmp_path: Path) -> None:
@@ -177,9 +186,11 @@ def test_publish_to_api_timeout(mock_post: MagicMock, tmp_path: Path) -> None:
     config_file_path.write_text(json.dumps({"api_token": "abc"}))
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_request_exception(mock_post: MagicMock, tmp_path: Path) -> None:
@@ -189,9 +200,11 @@ def test_publish_to_api_request_exception(mock_post: MagicMock, tmp_path: Path) 
     config_file_path.write_text(json.dumps({"api_token": "abc"}))
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_bad_status(mock_post: MagicMock, tmp_path: Path) -> None:
@@ -204,14 +217,17 @@ def test_publish_to_api_bad_status(mock_post: MagicMock, tmp_path: Path) -> None
     config_file_path.write_text(json.dumps({"api_token": "abc"}))
 
     with patch("esm_tracker.publisher.Path.home", return_value=tmp_path):
-        assert publish_to_api(
-            "http://fake", "http://dash", {"k": "v"}, output_yaml_path
-        ) is False
+        assert (
+            publish_to_api("http://fake", "http://dash", {"k": "v"}, output_yaml_path)
+            is False
+        )
+
 
 @patch("esm_tracker.publisher.requests.patch")
 def test_update_api_settings_request_exception(mock_patch: MagicMock) -> None:
     mock_patch.side_effect = requests.exceptions.RequestException("RequestException")
     assert update_api_settings("http://fake", "key", "openai", "Test") is False
+
 
 def test_publish_to_api_yaml_read_error(tmp_path: Path) -> None:
     yaml_path = tmp_path / "test.yaml"
@@ -219,6 +235,7 @@ def test_publish_to_api_yaml_read_error(tmp_path: Path) -> None:
         "esm_tracker.publisher.Path.read_bytes", side_effect=OSError("Read err")
     ):
         assert publish_to_api("http", "http", {}, yaml_path) is False
+
 
 @patch("esm_tracker.publisher.requests.post")
 def test_publish_to_api_prompt_file_read_error(
@@ -239,6 +256,7 @@ def test_publish_to_api_prompt_file_read_error(
         patch("esm_tracker.publisher.Path.read_bytes", side_effect=OSError("Err")),
     ):
         assert publish_to_api("http", "http", {}, yaml_path, prompt_path) is False
+
 
 @patch("esm_tracker.publisher.requests.patch")
 def test_update_api_settings_bad_status(mock_patch: MagicMock) -> None:

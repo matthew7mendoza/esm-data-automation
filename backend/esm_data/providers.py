@@ -25,13 +25,21 @@ __all__: Final[list[str]] = [
 class LLMProvider(Protocol):
     """Duck typing structural interface for concrete LLM client abstractions."""
 
-    def generate_structured[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T: ...
+    def generate_structured[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType: ...
 
-    async def generate_structured_async[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T: ...
+    async def generate_structured_async[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType: ...
 
 
 class GeminiProvider:
@@ -60,8 +68,8 @@ class GeminiProvider:
     def __str__(self) -> str:
         return f"Gemini Provider Engine [Active Model: {self.model_name}]"
 
-    def _build_generation_configuration[T: BaseModel](
-        self, system_instruction_text: str, schema_type: type[T]
+    def _build_generation_configuration[ResponseModelType: BaseModel](
+        self, system_instruction_text: str, schema_type: type[ResponseModelType]
     ) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
             system_instruction=system_instruction_text,
@@ -70,9 +78,13 @@ class GeminiProvider:
             temperature=0.0,
         )
 
-    def generate_structured[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T:
+    def generate_structured[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType:
         generation_configuration = self._build_generation_configuration(
             system_instruction_text=system_instruction, schema_type=response_schema
         )
@@ -86,11 +98,15 @@ class GeminiProvider:
             raise ValueError(
                 "Failed to parse structured JSON response from Gemini engine."
             )
-        return cast(T, parsed_response_data)
+        return cast(ResponseModelType, parsed_response_data)
 
-    async def generate_structured_async[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T:
+    async def generate_structured_async[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType:
         generation_configuration = self._build_generation_configuration(
             system_instruction_text=system_instruction, schema_type=response_schema
         )
@@ -104,7 +120,7 @@ class GeminiProvider:
             raise ValueError(
                 "Failed to parse structured JSON response from Gemini engine."
             )
-        return cast(T, parsed_response_data)
+        return cast(ResponseModelType, parsed_response_data)
 
 
 class OpenAIProvider:
@@ -143,17 +159,23 @@ class OpenAIProvider:
             {"role": "user", "content": user_prompt_text},
         ]
 
-    def _extract_parsed_response[T: BaseModel](self, response_object: Any) -> T:
+    def _extract_parsed_response[ResponseModelType: BaseModel](
+        self, response_object: Any, _response_schema_type: type[ResponseModelType]
+    ) -> ResponseModelType:
         parsed_response_data = response_object.choices[0].message.parsed
         if parsed_response_data is None:
             raise ValueError(
                 "Failed to parse structured JSON response from OpenAI engine."
             )
-        return cast(T, parsed_response_data)
+        return cast(ResponseModelType, parsed_response_data)
 
-    def generate_structured[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T:
+    def generate_structured[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType:
         messages_payload = self._build_message_payload(
             system_instruction_text=system_instruction, user_prompt_text=prompt
         )
@@ -163,11 +185,15 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        return self._extract_parsed_response(chat_completion_response)
+        return self._extract_parsed_response(chat_completion_response, response_schema)
 
-    async def generate_structured_async[T: BaseModel](
-        self, *, prompt: str, system_instruction: str, response_schema: type[T]
-    ) -> T:
+    async def generate_structured_async[ResponseModelType: BaseModel](
+        self,
+        *,
+        prompt: str,
+        system_instruction: str,
+        response_schema: type[ResponseModelType],
+    ) -> ResponseModelType:
         messages_payload = self._build_message_payload(
             system_instruction_text=system_instruction, user_prompt_text=prompt
         )
@@ -177,7 +203,7 @@ class OpenAIProvider:
             response_format=response_schema,
             temperature=0.0,
         )
-        return self._extract_parsed_response(chat_completion_response)
+        return self._extract_parsed_response(chat_completion_response, response_schema)
 
 
 class ProviderArgs(TypedDict, total=False):
@@ -231,9 +257,7 @@ def get_provider(
 
 
 def _instantiate_custom_provider(
-    matched_custom_key: str,
-    active_configuration: Any,
-    **kwargs: Unpack[ProviderArgs]
+    matched_custom_key: str, active_configuration: Any, **kwargs: Unpack[ProviderArgs]
 ) -> LLMProvider:
     custom_providers = active_configuration.custom_key_providers
     custom_provider_type = custom_providers[matched_custom_key].lower()

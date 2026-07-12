@@ -55,6 +55,7 @@ def test_publisher_prompt_file_read_error(tmp_path: Path) -> None:
 
         publish_to_api("http", "http", {}, yaml_path, prompt_path)
 
+
 def test_publisher_config_os_error(tmp_path: Path) -> None:
     """Tests OSError when reading config."""
     yaml_path = tmp_path / "test.yaml"
@@ -80,6 +81,7 @@ def test_publisher_config_json_decode_error(tmp_path: Path) -> None:
         res = publish_to_api("http", "http", {}, yaml_path)
         assert res is False
 
+
 def test_publisher_prompt_file_happy_path(tmp_path: Path) -> None:
     """Tests the happy path for the prompt file loading."""
     yaml_path = tmp_path / "test.yaml"
@@ -98,6 +100,7 @@ def test_publisher_prompt_file_happy_path(tmp_path: Path) -> None:
         mock_post.return_value = mock_response
 
         publish_to_api("http", "http", {}, yaml_path, prompt_path)
+
 
 def test_publisher_config_os_error_exact(tmp_path: Path) -> None:
     """Tests OSError explicitly when calling open on the config file."""
@@ -157,9 +160,7 @@ def test_scanner_scan_data_file_unknown_format() -> None:
 def test_scanner_scan_data_file_parse_error() -> None:
     """Tests scan_data_file extracted_metadata is None branch."""
     with (
-        patch(
-            "esm_tracker.scanner._safe_open_dataset", return_value=xarray.Dataset()
-        ),
+        patch("esm_tracker.scanner._safe_open_dataset", return_value=xarray.Dataset()),
         patch("esm_tracker.scanner._parse_dataset_metadata", return_value=None),
     ):
         res = scan_data_file(Path("test.nc"))
@@ -188,7 +189,7 @@ def test_scanner_process_file_for_scanning_not_required(tmp_path: Path) -> None:
 def test_scanner_process_file_for_scanning_cache_hit(tmp_path: Path) -> None:
     """Tests cached_metadata is not None branch."""
     backend = JsonCacheBackend(tmp_path / "cache.json")
-    backend.update_cache_entry("test.nc", 1.0, {"file_name": "test.nc"}) # type: ignore
+    backend.update_cache_entry("test.nc", 1.0, {"file_name": "test.nc"})  # type: ignore
     with patch("esm_tracker.scanner.get_file_modification_time", return_value=1.0):
         req, meta = _process_file_for_scanning(Path("test.nc"), "*.nc", "", backend)
         assert req is False
@@ -219,11 +220,11 @@ def test_scanner_initialize_cache_backend_massive(tmp_path: Path) -> None:
         sqlite.unlink()
     json_path = tmp_path / ".esm-cache.json"
     json_path.write_text(
-        '{"test": {"modification_time": 1.0, '
-        '"metadata": {"file_name": "test.nc"}}}'
+        '{"test": {"modification_time": 1.0, "metadata": {"file_name": "test.nc"}}}'
     )
     backend = _initialize_cache_backend(tmp_path, dummy_files)
     assert isinstance(backend, SqliteCacheBackend)
+
 
 def test_scanner_initialize_cache_backend_small(tmp_path: Path) -> None:
     """Tests small dataset threshold JSON."""
@@ -235,6 +236,7 @@ def test_scanner_initialize_cache_backend_small(tmp_path: Path) -> None:
         json_path.unlink()
     backend = _initialize_cache_backend(tmp_path, [Path("test.nc")])
     assert isinstance(backend, JsonCacheBackend)
+
 
 def test_scanner_initialize_cache_backend_existing_sqlite(tmp_path: Path) -> None:
     """Tests that an existing SQLite DB is directly used."""
@@ -250,7 +252,7 @@ def test_scanner_scan_directory_cache_hit(tmp_path: Path) -> None:
     nc.write_text("data")
     backend_path = tmp_path / ".esm-cache.json"
     backend = JsonCacheBackend(backend_path)
-    backend.update_cache_entry(str(nc), nc.stat().st_mtime, {"file_name": "test.nc"}) # type: ignore
+    backend.update_cache_entry(str(nc), nc.stat().st_mtime, {"file_name": "test.nc"})  # type: ignore
     backend.finalize_cache()
 
     res = scan_directory(tmp_path)
